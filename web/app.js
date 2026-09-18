@@ -982,44 +982,61 @@ function downloadCsv(content, filename) {
   URL.revokeObjectURL(url);
 }
 
-// ---------------- Cloud Sync Engine (Phone <-> Web) ---------------- //
+// ---------------- Firebase Firestore Cloud Sync Engine (Phone <-> Web) ---------------- //
 
-const SYNC_BUCKET_URL = "https://kvdb.io/4y9hN6Fk2XvH4X9gZ9L1pA";
-const SYNC_CODE_KEY = "attendmark_sync_code";
+const FIREBASE_PROJECT_KEY = "attendmark_firebase_project_id";
+const FIREBASE_API_KEY = "attendmark_firebase_api_key";
 
-function getStoredSyncCode() {
-  return (localStorage.getItem(SYNC_CODE_KEY) || "").toUpperCase().trim();
+function getStoredFirebaseConfig() {
+  return {
+    projectId: (localStorage.getItem(FIREBASE_PROJECT_KEY) || "").trim(),
+    apiKey: (localStorage.getItem(FIREBASE_API_KEY) || "").trim()
+  };
 }
 
-function setStoredSyncCode(code) {
-  const clean = (code || "").toUpperCase().trim();
-  localStorage.setItem(SYNC_CODE_KEY, clean);
-  const input1 = document.getElementById("sync-code-input");
-  const input2 = document.getElementById("modal-sync-code-input");
-  if (input1) input1.value = clean;
-  if (input2) input2.value = clean;
-  updateSyncHeaderBadge(clean);
+function setStoredFirebaseConfig(projectId, apiKey) {
+  const cleanProj = (projectId || "").trim();
+  const cleanKey = (apiKey || "").trim();
+  localStorage.setItem(FIREBASE_PROJECT_KEY, cleanProj);
+  localStorage.setItem(FIREBASE_API_KEY, cleanKey);
+
+  const p1 = document.getElementById("firebase-project-input");
+  const k1 = document.getElementById("firebase-apikey-input");
+  const p2 = document.getElementById("modal-firebase-project-input");
+  const k2 = document.getElementById("modal-firebase-apikey-input");
+
+  if (p1) p1.value = cleanProj;
+  if (k1) k1.value = cleanKey;
+  if (p2) p2.value = cleanProj;
+  if (k2) k2.value = cleanKey;
+
+  updateSyncHeaderBadge(cleanProj);
 }
 
-function updateSyncHeaderBadge(code) {
+function updateSyncHeaderBadge(projectId) {
   const label = document.getElementById("header-sync-label");
   const icon = document.getElementById("header-sync-icon");
   const btn = document.getElementById("header-sync-btn");
   if (!label || !btn) return;
 
-  if (code) {
-    label.innerText = code;
-    btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-xs transition shadow-sm";
-    if (icon) icon.className = "w-3.5 h-3.5 text-emerald-600";
+  if (projectId) {
+    label.innerText = "Firebase Connected";
+    btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-bold text-xs transition shadow-sm";
+    if (icon) icon.className = "w-3.5 h-3.5 text-amber-600";
   } else {
-    label.innerText = "Sync";
-    btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-xs transition shadow-sm";
-    if (icon) icon.className = "w-3.5 h-3.5 text-indigo-600";
+    label.innerText = "Firebase Sync";
+    btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 font-semibold text-xs transition shadow-sm";
+    if (icon) icon.className = "w-3.5 h-3.5 text-slate-500";
   }
 }
 
+function getFirestoreUrl(projectId, docPath, apiKey) {
+  const base = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${docPath}`;
+  return apiKey ? `${base}?key=${apiKey}` : base;
+}
+
 // Convert local web db format to standard SyncPayload matching Android app
-function buildSyncPayload(syncCode) {
+function buildSyncPayload() {
   const syncClasses = (db.classes || []).map(c => ({
     id: c.id,
     name: c.name,
@@ -1045,7 +1062,6 @@ function buildSyncPayload(syncCode) {
   const syncAttendance = [];
   if (db.attendance) {
     Object.keys(db.attendance).forEach(key => {
-      // Key format: "YYYY-MM-DD_clsId"
       const parts = key.split("_");
       const dateIso = parts[0];
       const classId = parts.slice(1).join("_") || (db.classes[0]?.id || "");
@@ -1087,7 +1103,7 @@ function buildSyncPayload(syncCode) {
   }));
 
   return {
-    syncCode: syncCode,
+    syncCode: "firebase",
     timestamp: Date.now(),
     appVersion: "1.0",
     classes: syncClasses,
@@ -1098,13 +1114,12 @@ function buildSyncPayload(syncCode) {
   };
 }
 
-// Ingest payload received from Android app into local web db
+// Ingest payload received from Firestore into local web db
 function ingestSyncPayload(payload) {
   if (!payload || !payload.classes) {
-    throw new Error("Invalid payload structure from cloud");
+    throw new Error("Invalid payload structure from Firebase");
   }
 
-  // Merge classes
   if (payload.classes.length > 0) {
     db.classes = payload.classes.map(c => ({
       id: c.id,
@@ -1115,7 +1130,6 @@ function ingestSyncPayload(payload) {
     db.activeClassId = db.classes[0]?.id || "";
   }
 
-  // Merge students
   if (payload.students.length > 0) {
     db.students = payload.students.map(s => ({
       id: s.id,
@@ -1129,7 +1143,6 @@ function ingestSyncPayload(payload) {
     }));
   }
 
-  // Merge exams
   if (payload.exams.length > 0) {
     db.exams = payload.exams.map(e => ({
       id: e.id,
@@ -1141,7 +1154,6 @@ function ingestSyncPayload(payload) {
     }));
   }
 
-  // Merge marks
   if (payload.marks.length > 0) {
     db.marks = payload.marks.map(m => ({
       examId: m.examId,
@@ -1150,7 +1162,6 @@ function ingestSyncPayload(payload) {
     }));
   }
 
-  // Merge attendance
   if (payload.attendance && payload.attendance.length > 0) {
     db.attendance = db.attendance || {};
     payload.attendance.forEach(rec => {
@@ -1167,92 +1178,133 @@ function ingestSyncPayload(payload) {
   switchTab(currentTab);
 }
 
-async function pushToCloud() {
-  const code = (document.getElementById("sync-code-input")?.value || getStoredSyncCode()).trim().toUpperCase();
-  if (!code || code.length < 4) {
-    showToast("Please enter a valid 6-character Sync Code first", "warning");
+async function pushToFirebase() {
+  const projInput = document.getElementById("firebase-project-input")?.value;
+  const keyInput = document.getElementById("firebase-apikey-input")?.value;
+  const stored = getStoredFirebaseConfig();
+
+  const projectId = (projInput !== undefined ? projInput : stored.projectId).trim();
+  const apiKey = (keyInput !== undefined ? keyInput : stored.apiKey).trim();
+
+  if (!projectId) {
+    showToast("Please enter your Firebase Project ID", "warning");
     return;
   }
 
-  setStoredSyncCode(code);
+  setStoredFirebaseConfig(projectId, apiKey);
   const statusEl = document.getElementById("sync-status-text");
-  if (statusEl) statusEl.innerText = "Pushing data to cloud...";
+  if (statusEl) statusEl.innerText = "Connecting to Firebase Firestore...";
 
   try {
-    const payload = buildSyncPayload(code);
-    const resp = await fetch(`${SYNC_BUCKET_URL}/${code}`, {
-      method: "POST",
+    const payload = buildSyncPayload();
+    const rawJson = JSON.stringify(payload);
+
+    const firestoreBody = {
+      fields: {
+        payloadJson: { stringValue: rawJson },
+        lastUpdated: { integerValue: Date.now().toString() },
+        classCount: { integerValue: payload.classes.length.toString() },
+        studentCount: { integerValue: payload.students.length.toString() }
+      }
+    };
+
+    const url = getFirestoreUrl(projectId, "attendmark_sync/main_data", apiKey);
+    const resp = await fetch(url, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(firestoreBody)
     });
 
     if (resp.ok) {
-      if (statusEl) statusEl.innerText = `Data uploaded! Open phone app and tap 'Download' with code ${code}.`;
-      showToast(`Uploaded to Cloud! Sync Code: ${code}`, "success");
+      if (statusEl) statusEl.innerText = `Data uploaded to Firebase! (${payload.classes.length} classes, ${payload.students.length} students)`;
+      showToast("Uploaded to Firebase Firestore!", "success");
     } else {
-      throw new Error(`Server returned ${resp.status}`);
+      const err = await resp.text();
+      console.error("Firestore push error", err);
+      throw new Error(`Firebase returned ${resp.status}. Verify Firestore rules.`);
     }
   } catch (err) {
-    console.error("Cloud push failed", err);
+    console.error("Firebase push failed", err);
     if (statusEl) statusEl.innerText = "Error: " + err.message;
-    showToast("Push failed: " + err.message, "error");
+    showToast(err.message, "error");
   }
 }
 
-async function pullFromCloud() {
-  const code = (document.getElementById("sync-code-input")?.value || getStoredSyncCode()).trim().toUpperCase();
-  if (!code || code.length < 4) {
-    showToast("Please enter the 6-character code from your phone", "warning");
+async function pullFromFirebase() {
+  const projInput = document.getElementById("firebase-project-input")?.value;
+  const keyInput = document.getElementById("firebase-apikey-input")?.value;
+  const stored = getStoredFirebaseConfig();
+
+  const projectId = (projInput !== undefined ? projInput : stored.projectId).trim();
+  const apiKey = (keyInput !== undefined ? keyInput : stored.apiKey).trim();
+
+  if (!projectId) {
+    showToast("Please enter your Firebase Project ID", "warning");
     return;
   }
 
-  setStoredSyncCode(code);
+  setStoredFirebaseConfig(projectId, apiKey);
   const statusEl = document.getElementById("sync-status-text");
-  if (statusEl) statusEl.innerText = "Connecting to phone cloud storage...";
+  if (statusEl) statusEl.innerText = "Fetching from Firebase Firestore...";
 
   try {
-    const resp = await fetch(`${SYNC_BUCKET_URL}/${code}`, {
-      method: "GET"
-    });
+    const url = getFirestoreUrl(projectId, "attendmark_sync/main_data", apiKey);
+    const resp = await fetch(url, { method: "GET" });
 
     if (!resp.ok) {
       if (resp.status === 404) {
-        throw new Error(`No data found for code ${code}. On your phone, tap 'Upload to Web' first!`);
+        throw new Error(`No data found in Firebase project '${projectId}'. Push data first from phone or web.`);
       }
-      throw new Error(`Cloud error ${resp.status}`);
+      throw new Error(`Firebase error ${resp.status}. Verify Firestore rules.`);
     }
 
-    const payload = await resp.json();
+    const doc = await resp.json();
+    const rawJson = doc.fields?.payloadJson?.stringValue;
+    if (!rawJson) {
+      throw new Error("Empty data payload in Firestore");
+    }
+
+    const payload = JSON.parse(rawJson);
     ingestSyncPayload(payload);
 
     if (statusEl) statusEl.innerText = `Synced! Loaded ${payload.classes?.length || 0} classes and ${payload.students?.length || 0} students.`;
-    showToast(`Synced successfully with phone (${code})!`, "success");
+    showToast("Synced from Firebase Firestore!", "success");
   } catch (err) {
-    console.error("Cloud pull failed", err);
+    console.error("Firebase pull failed", err);
     if (statusEl) statusEl.innerText = err.message;
     showToast(err.message, "error");
   }
 }
 
-async function pullFromCloudModal() {
-  const code = (document.getElementById("modal-sync-code-input")?.value || "").trim().toUpperCase();
-  if (!code) {
-    showToast("Please enter code", "warning");
+async function pullFromFirebaseModal() {
+  const projectId = (document.getElementById("modal-firebase-project-input")?.value || "").trim();
+  const apiKey = (document.getElementById("modal-firebase-apikey-input")?.value || "").trim();
+
+  if (!projectId) {
+    showToast("Please enter Firebase Project ID", "warning");
     return;
   }
-  setStoredSyncCode(code);
+
+  setStoredFirebaseConfig(projectId, apiKey);
   const status = document.getElementById("modal-sync-status");
-  if (status) status.innerText = "Fetching phone data...";
+  if (status) status.innerText = "Fetching from Firebase...";
+
   try {
-    const resp = await fetch(`${SYNC_BUCKET_URL}/${code}`);
+    const url = getFirestoreUrl(projectId, "attendmark_sync/main_data", apiKey);
+    const resp = await fetch(url);
     if (!resp.ok) {
-      if (resp.status === 404) throw new Error("No phone data found. Tap 'Upload to Web' on your phone first.");
+      if (resp.status === 404) throw new Error("No data in Firestore yet. Push from phone first.");
       throw new Error("HTTP error " + resp.status);
     }
-    const payload = await resp.json();
+    const doc = await resp.json();
+    const rawJson = doc.fields?.payloadJson?.stringValue;
+    if (!rawJson) throw new Error("Document has no data");
+
+    const payload = JSON.parse(rawJson);
     ingestSyncPayload(payload);
+
     if (status) status.innerText = `Synced ${payload.students?.length || 0} students!`;
-    showToast("Phone data synced successfully!", "success");
+    showToast("Synced from Firebase!", "success");
     closeModal("cloud-sync-modal");
   } catch (e) {
     if (status) status.innerText = e.message;
@@ -1260,28 +1312,42 @@ async function pullFromCloudModal() {
   }
 }
 
-async function pushToCloudModal() {
-  const code = (document.getElementById("modal-sync-code-input")?.value || "").trim().toUpperCase();
-  if (!code) {
-    showToast("Please enter code", "warning");
+async function pushToFirebaseModal() {
+  const projectId = (document.getElementById("modal-firebase-project-input")?.value || "").trim();
+  const apiKey = (document.getElementById("modal-firebase-apikey-input")?.value || "").trim();
+
+  if (!projectId) {
+    showToast("Please enter Firebase Project ID", "warning");
     return;
   }
-  setStoredSyncCode(code);
+
+  setStoredFirebaseConfig(projectId, apiKey);
   const status = document.getElementById("modal-sync-status");
-  if (status) status.innerText = "Uploading web data...";
+  if (status) status.innerText = "Uploading to Firebase...";
+
   try {
-    const payload = buildSyncPayload(code);
-    const resp = await fetch(`${SYNC_BUCKET_URL}/${code}`, {
-      method: "POST",
+    const payload = buildSyncPayload();
+    const rawJson = JSON.stringify(payload);
+    const firestoreBody = {
+      fields: {
+        payloadJson: { stringValue: rawJson },
+        lastUpdated: { integerValue: Date.now().toString() }
+      }
+    };
+
+    const url = getFirestoreUrl(projectId, "attendmark_sync/main_data", apiKey);
+    const resp = await fetch(url, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(firestoreBody)
     });
+
     if (resp.ok) {
-      if (status) status.innerText = "Uploaded! Tap 'Download' on phone.";
-      showToast("Web data uploaded to phone cloud!", "success");
+      if (status) status.innerText = "Uploaded to Firebase!";
+      showToast("Data pushed to Firebase Firestore!", "success");
       closeModal("cloud-sync-modal");
     } else {
-      throw new Error("Server error " + resp.status);
+      throw new Error("Firebase error " + resp.status);
     }
   } catch (e) {
     if (status) status.innerText = e.message;
@@ -1292,9 +1358,9 @@ async function pushToCloudModal() {
 // ---------------- Initialize App on Page Load ---------------- //
 
 window.addEventListener("DOMContentLoaded", () => {
-  const storedCode = getStoredSyncCode();
-  if (storedCode) {
-    setStoredSyncCode(storedCode);
+  const config = getStoredFirebaseConfig();
+  if (config.projectId) {
+    setStoredFirebaseConfig(config.projectId, config.apiKey);
   }
   renderClassSelector();
   switchTab('dashboard');

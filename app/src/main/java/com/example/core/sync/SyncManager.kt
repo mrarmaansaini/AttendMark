@@ -17,7 +17,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.security.SecureRandom
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,9 +34,9 @@ class SyncManager(
 ) {
     private val db = AttendMarkDatabase.getDatabase(context)
     private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
         .build()
 
     private val moshi = Moshi.Builder()
@@ -45,24 +45,14 @@ class SyncManager(
 
     private val adapter = moshi.adapter(SyncPayload::class.java)
 
-    // Free, zero-setup reliable cloud key-value endpoint for sync
-    // Uses kvdb.io (Free public Redis/Key-Value REST bucket with CORS support)
-    // Keys are isolated by the teacher's secret 6-char or 8-char sync code
-    private val bucketBaseUrl = "https://kvdb.io/4y9hN6Fk2XvH4X9gZ9L1pA" // Fallback bucket namespace
-
-    companion object {
-        private const val CHARSET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ" // unambiguous chars
-        fun generateSyncCode(): String {
-            val random = SecureRandom()
-            val sb = StringBuilder(6)
-            for (i in 0 until 6) {
-                sb.append(CHARSET[random.nextInt(CHARSET.length)])
-            }
-            return sb.toString()
-        }
+    // Standard Firestore REST API endpoint format:
+    // https://firestore.googleapis.com/v1/projects/{projectId}/databases/(default)/documents/{collection}/{documentId}
+    private fun getFirestoreUrl(projectId: String, documentPath: String, apiKey: String?): String {
+        val base = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/$documentPath"
+        return if (!apiKey.isNullOrBlank()) "$base?key=$apiKey" else base
     }
 
-    suspend fun exportPayload(syncCode: String): SyncPayload = withContext(Dispatchers.IO) {
+    suspend fun exportPayload(): SyncPayload = withContext(Dispatchers.IO) {
         val classes = db.classDao().getAllClassesSync().map {
             SyncClass(
                 id = it.id,
@@ -128,7 +118,7 @@ class SyncManager(
         }
 
         SyncPayload(
-            syncCode = syncCode,
+            syncCode = "firebase",
             timestamp = System.currentTimeMillis(),
             classes = classes,
             students = students,
@@ -219,64 +209,97 @@ class SyncManager(
         }
     }
 
-    suspend fun pushToCloud(syncCode: String): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun pushToFirebase(projectId: String, apiKey: String): SyncResult = withContext(Dispatchers.IO) {
+        val cleanProject = projectId.trim()
+        if (cleanProject.isBlank()) {
+            return@withContext SyncResult.Error("Please enter your Firebase Project ID first")
+        }
+
         try {
-            val payload = exportPayload(syncCode)
-            val json = adapter.toJson(payload)
-            val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+            val payload = exportPayload()
+            val rawJson = adapter.toJson(payload)
+
+            // Wrap into Firestore document fields structure
+            val firestoreBody = JSONObject().apply {
+                val fields = JSONObject().apply {
+                    put("payloadJson", JSONObject().apply { put("stringValue", rawJson) })
+                    put("lastUpdated", JSONObject().apply { put("integerValue", System.currentTimeMillis().toString()) })
+                    put("classCount", JSONObject().apply { put("integerValue", payload.classes.size.toString()) })
+                    put("studentCount", JSONObject().apply { put("integerValue", payload.students.size.toString()) })
+                }
+                put("fields", fields)
+            }
+
+            val body = firestoreBody.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val url = getFirestoreUrl(cleanProject, "attendmark_sync/main_data", apiKey.trim())
             
+            // PATCH to update or create document
             val request = Request.Builder()
-                .url("$bucketBaseUrl/$syncCode")
-                .post(body)
+                .url(url)
+                .patch(body)
                 .build()
 
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     val timeStr = SimpleDateFormat("MMM d, hh:mm a", Locale.getDefault()).format(Date())
                     preferencesManager.saveLastSyncTime(timeStr)
-                    SyncResult.Success("Cloud sync uploaded successfully", payload.classes.size, payload.students.size)
+                    SyncResult.Success("Synced with Firebase Firestore!", payload.classes.size, payload.students.size)
                 } else {
-                    SyncResult.Error("Cloud push failed (Code ${response.code}): ${response.message}")
+                    val errBody = response.body?.string() ?: ""
+                    Log.e("SyncManager", "Firebase push error: ${response.code} $errBody")
+                    SyncResult.Error("Firebase upload failed (${response.code}). Check Project ID / Rules in Firebase.")
                 }
             }
         } catch (e: Exception) {
             Log.e("SyncManager", "Push error", e)
-            SyncResult.Error("Network error: ${e.localizedMessage ?: "Unknown error"}")
+            SyncResult.Error("Connection error: ${e.localizedMessage ?: "Unknown error"}")
         }
     }
 
-    suspend fun pullFromCloud(syncCode: String): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun pullFromFirebase(projectId: String, apiKey: String): SyncResult = withContext(Dispatchers.IO) {
+        val cleanProject = projectId.trim()
+        if (cleanProject.isBlank()) {
+            return@withContext SyncResult.Error("Please enter your Firebase Project ID first")
+        }
+
         try {
+            val url = getFirestoreUrl(cleanProject, "attendmark_sync/main_data", apiKey.trim())
             val request = Request.Builder()
-                .url("$bucketBaseUrl/$syncCode")
+                .url(url)
                 .get()
                 .build()
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     return@withContext if (response.code == 404) {
-                        SyncResult.Error("No data found for Sync Code $syncCode. Push from web first or upload from phone.")
+                        SyncResult.Error("No data found in Firebase for '$cleanProject'. Tap 'Upload to Firebase' on Web or Phone first.")
                     } else {
-                        SyncResult.Error("Cloud pull failed (${response.code}): ${response.message}")
+                        val err = response.body?.string() ?: ""
+                        Log.e("SyncManager", "Firebase pull error: ${response.code} $err")
+                        SyncResult.Error("Firebase pull failed (${response.code}). Check Project ID / Permissions.")
                     }
                 }
 
                 val bodyStr = response.body?.string() ?: ""
-                if (bodyStr.isBlank()) {
-                    return@withContext SyncResult.Error("Cloud data is empty")
+                val jsonDoc = JSONObject(bodyStr)
+                val fields = jsonDoc.optJSONObject("fields")
+                val payloadJson = fields?.optJSONObject("payloadJson")?.optString("stringValue")
+
+                if (payloadJson.isNullOrBlank()) {
+                    return@withContext SyncResult.Error("Firebase data is empty or invalid format")
                 }
 
-                val payload = adapter.fromJson(bodyStr)
-                    ?: return@withContext SyncResult.Error("Could not parse sync payload")
+                val payload = adapter.fromJson(payloadJson)
+                    ?: return@withContext SyncResult.Error("Could not parse payload from Firebase")
 
                 importPayload(payload)
                 val timeStr = SimpleDateFormat("MMM d, hh:mm a", Locale.getDefault()).format(Date())
                 preferencesManager.saveLastSyncTime(timeStr)
-                SyncResult.Success("Synced ${payload.classes.size} classes, ${payload.students.size} students", payload.classes.size, payload.students.size)
+                SyncResult.Success("Synced ${payload.classes.size} classes, ${payload.students.size} students from Firebase", payload.classes.size, payload.students.size)
             }
         } catch (e: Exception) {
             Log.e("SyncManager", "Pull error", e)
-            SyncResult.Error("Network error: ${e.localizedMessage ?: "Unknown error"}")
+            SyncResult.Error("Connection error: ${e.localizedMessage ?: "Unknown error"}")
         }
     }
 }

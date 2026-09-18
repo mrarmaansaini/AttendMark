@@ -41,21 +41,27 @@ class PreferencesManager(private val context: Context) {
         val KEY_LOW_ATTENDANCE_THRESHOLD = intPreferencesKey("low_attendance_threshold")
         val KEY_IS_ONBOARDED = booleanPreferencesKey("is_onboarded")
         val KEY_ACTIVE_CLASS_ID = stringPreferencesKey("active_class_id")
-        val KEY_CLOUD_SYNC_CODE = stringPreferencesKey("cloud_sync_code")
+        val KEY_FIREBASE_PROJECT_ID = stringPreferencesKey("firebase_project_id")
+        val KEY_FIREBASE_API_KEY = stringPreferencesKey("firebase_api_key")
         val KEY_LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
     }
 
-    val syncCodeFlow: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_CLOUD_SYNC_CODE] ?: ""
+    val firebaseProjectIdFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_FIREBASE_PROJECT_ID] ?: ""
+    }
+
+    val firebaseApiKeyFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_FIREBASE_API_KEY] ?: ""
     }
 
     val lastSyncTimeFlow: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_LAST_SYNC_TIME] ?: ""
     }
 
-    suspend fun saveSyncCode(code: String) {
+    suspend fun saveFirebaseConfig(projectId: String, apiKey: String) {
         context.dataStore.edit { prefs ->
-            prefs[KEY_CLOUD_SYNC_CODE] = code
+            prefs[KEY_FIREBASE_PROJECT_ID] = projectId.trim()
+            prefs[KEY_FIREBASE_API_KEY] = apiKey.trim()
         }
     }
 

@@ -34,13 +34,17 @@ class AttendMarkRepository(context: Context) {
     val preferencesManager = PreferencesManager(context)
     val syncManager = com.example.core.sync.SyncManager(context, preferencesManager)
 
-    // Sync state flows
-    val syncCodeFlow: Flow<String> = preferencesManager.syncCodeFlow
+    // Firebase Sync state flows
+    val firebaseProjectIdFlow: Flow<String> = preferencesManager.firebaseProjectIdFlow
+    val firebaseApiKeyFlow: Flow<String> = preferencesManager.firebaseApiKeyFlow
     val lastSyncTimeFlow: Flow<String> = preferencesManager.lastSyncTimeFlow
 
-    suspend fun saveSyncCode(code: String) = preferencesManager.saveSyncCode(code)
-    suspend fun syncPush(code: String) = syncManager.pushToCloud(code)
-    suspend fun syncPull(code: String) = syncManager.pullFromCloud(code)
+    suspend fun saveFirebaseConfig(projectId: String, apiKey: String) =
+        preferencesManager.saveFirebaseConfig(projectId, apiKey)
+    suspend fun syncPushFirebase(projectId: String, apiKey: String) =
+        syncManager.pushToFirebase(projectId, apiKey)
+    suspend fun syncPullFirebase(projectId: String, apiKey: String) =
+        syncManager.pullFromFirebase(projectId, apiKey)
 
     // Profile & Preferences
     val profileFlow: Flow<TeacherProfile> = preferencesManager.profileFlow

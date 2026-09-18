@@ -76,12 +76,12 @@ fun ProfileScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val profile by repository.profileFlow.collectAsState(initial = TeacherProfile())
-    val storedSyncCode by repository.syncCodeFlow.collectAsState(initial = "")
+    val storedProjectId by repository.firebaseProjectIdFlow.collectAsState(initial = "")
+    val storedApiKey by repository.firebaseApiKeyFlow.collectAsState(initial = "")
     val lastSyncTime by repository.lastSyncTimeFlow.collectAsState(initial = "")
 
-    var currentSyncCode by remember(storedSyncCode) {
-        mutableStateOf(if (storedSyncCode.isNotBlank()) storedSyncCode else com.example.core.sync.SyncManager.generateSyncCode())
-    }
+    var firebaseProjectId by remember(storedProjectId) { mutableStateOf(storedProjectId) }
+    var firebaseApiKey by remember(storedApiKey) { mutableStateOf(storedApiKey) }
     var isSyncing by remember { mutableStateOf(false) }
 
     var fullName by remember(profile) { mutableStateOf(profile.fullName) }
@@ -165,7 +165,7 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Web Companion & Cloud Sync Card
+            // Firebase Cloud Sync Card
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
                 shape = RoundedCornerShape(16.dp),
@@ -188,13 +188,13 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Web Companion & Cloud Sync",
+                                text = "Firebase Cloud Sync",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                             Text(
-                                text = "Pair with your computer / browser",
+                                text = "Two-way sync with Web using your Firebase project",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                             )
@@ -203,58 +203,30 @@ fun ProfileScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    Text(
-                        text = "Your Private 6-Character Sync Code:",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    OutlinedTextField(
+                        value = firebaseProjectId,
+                        onValueChange = { firebaseProjectId = it },
+                        label = { Text("Firebase Project ID") },
+                        placeholder = { Text("e.g. attendmark-prod") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surface)
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = currentSyncCode,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 4.sp,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(
-                            onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("Sync Code", currentSyncCode)
-                                clipboard?.setPrimaryClip(clip)
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Sync code $currentSyncCode copied to clipboard")
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy code", tint = MaterialTheme.colorScheme.primary)
-                        }
-                        IconButton(
-                            onClick = {
-                                val newCode = com.example.core.sync.SyncManager.generateSyncCode()
-                                currentSyncCode = newCode
-                                scope.launch {
-                                    repository.saveSyncCode(newCode)
-                                    snackbarHostState.showSnackbar("Generated new Sync Code: $newCode")
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Generate new code", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+                    OutlinedTextField(
+                        value = firebaseApiKey,
+                        onValueChange = { firebaseApiKey = it },
+                        label = { Text("Firebase Web API Key (Optional)") },
+                        placeholder = { Text("e.g. AIzaSy...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp)
+                    )
 
                     if (lastSyncTime.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "Last synced: $lastSyncTime",
                             style = MaterialTheme.typography.labelSmall,
@@ -267,18 +239,22 @@ fun ProfileScreen(
                     Row(modifier = Modifier.fillMaxWidth()) {
                         Button(
                             onClick = {
+                                if (firebaseProjectId.isBlank()) {
+                                    scope.launch { snackbarHostState.showSnackbar("Enter Firebase Project ID") }
+                                    return@Button
+                                }
                                 if (isSyncing) return@Button
                                 isSyncing = true
                                 scope.launch {
-                                    repository.saveSyncCode(currentSyncCode)
-                                    val result = repository.syncPush(currentSyncCode)
+                                    repository.saveFirebaseConfig(firebaseProjectId, firebaseApiKey)
+                                    val result = repository.syncPushFirebase(firebaseProjectId, firebaseApiKey)
                                     isSyncing = false
                                     when (result) {
                                         is com.example.core.sync.SyncResult.Success -> {
-                                            snackbarHostState.showSnackbar("Uploaded to cloud! Enter code '$currentSyncCode' on Web")
+                                            snackbarHostState.showSnackbar("Uploaded to Firebase Firestore!")
                                         }
                                         is com.example.core.sync.SyncResult.Error -> {
-                                            snackbarHostState.showSnackbar("Sync error: ${result.message}")
+                                            snackbarHostState.showSnackbar("Firebase error: ${result.message}")
                                         }
                                     }
                                 }
@@ -298,7 +274,7 @@ fun ProfileScreen(
                             } else {
                                 Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Upload to Web")
+                                Text("Upload")
                             }
                         }
 
@@ -306,11 +282,15 @@ fun ProfileScreen(
 
                         OutlinedButton(
                             onClick = {
+                                if (firebaseProjectId.isBlank()) {
+                                    scope.launch { snackbarHostState.showSnackbar("Enter Firebase Project ID") }
+                                    return@OutlinedButton
+                                }
                                 if (isSyncing) return@OutlinedButton
                                 isSyncing = true
                                 scope.launch {
-                                    repository.saveSyncCode(currentSyncCode)
-                                    val result = repository.syncPull(currentSyncCode)
+                                    repository.saveFirebaseConfig(firebaseProjectId, firebaseApiKey)
+                                    val result = repository.syncPullFirebase(firebaseProjectId, firebaseApiKey)
                                     isSyncing = false
                                     when (result) {
                                         is com.example.core.sync.SyncResult.Success -> {
