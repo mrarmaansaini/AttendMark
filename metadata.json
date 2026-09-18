@@ -1,0 +1,6 @@
+{
+  "name": "AttendMark",
+  "description": "Offline-first attendance, marks recording, and WhatsApp messaging app for educators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
