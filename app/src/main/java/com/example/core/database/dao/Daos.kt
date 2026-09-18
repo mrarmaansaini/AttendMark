@@ -22,7 +22,10 @@ interface ClassDao {
     fun getAllActiveClasses(): Flow<List<ClassRoomEntity>>
 
     @Query("SELECT * FROM classes ORDER BY created_at DESC")
-    fun getAllClasses(): Flow<List<ClassRoomEntity>>
+    suspend fun getAllClassesSync(): List<ClassRoomEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertClasses(classes: List<ClassRoomEntity>)
 
     @Query("SELECT * FROM classes WHERE id = :id")
     suspend fun getClassById(id: String): ClassRoomEntity?
@@ -51,6 +54,9 @@ interface StudentDao {
     @Query("SELECT COUNT(*) FROM students WHERE class_id = :classId")
     fun getStudentCountFlow(classId: String): Flow<Int>
 
+    @Query("SELECT * FROM students ORDER BY CAST(roll_no AS INTEGER) ASC, name ASC")
+    suspend fun getAllStudentsSync(): List<StudentEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStudent(student: StudentEntity)
 
@@ -78,6 +84,9 @@ interface AttendanceDao {
     @Query("SELECT * FROM attendance_records WHERE class_id = :classId")
     fun getAllAttendanceForClass(classId: String): Flow<List<AttendanceRecordEntity>>
 
+    @Query("SELECT * FROM attendance_records")
+    suspend fun getAllAttendanceSync(): List<AttendanceRecordEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateAttendance(record: AttendanceRecordEntity)
 
@@ -92,6 +101,12 @@ interface AttendanceDao {
 interface ExamDao {
     @Query("SELECT * FROM exams WHERE class_id = :classId ORDER BY date_iso DESC, created_at DESC")
     fun getExamsForClass(classId: String): Flow<List<ExamEntity>>
+
+    @Query("SELECT * FROM exams ORDER BY date_iso DESC, created_at DESC")
+    suspend fun getAllExamsSync(): List<ExamEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertExams(exams: List<ExamEntity>)
 
     @Query("SELECT * FROM exams WHERE id = :examId")
     suspend fun getExamById(examId: String): ExamEntity?
@@ -119,6 +134,9 @@ interface MarkDao {
 
     @Query("SELECT m.* FROM mark_entries m INNER JOIN exams e ON m.exam_id = e.id WHERE e.class_id = :classId")
     suspend fun getAllMarksForClassSync(classId: String): List<MarkEntryEntity>
+
+    @Query("SELECT * FROM mark_entries")
+    suspend fun getAllMarksSync(): List<MarkEntryEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateMark(markEntry: MarkEntryEntity)

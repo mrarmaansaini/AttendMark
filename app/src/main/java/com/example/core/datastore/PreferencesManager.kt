@@ -41,6 +41,28 @@ class PreferencesManager(private val context: Context) {
         val KEY_LOW_ATTENDANCE_THRESHOLD = intPreferencesKey("low_attendance_threshold")
         val KEY_IS_ONBOARDED = booleanPreferencesKey("is_onboarded")
         val KEY_ACTIVE_CLASS_ID = stringPreferencesKey("active_class_id")
+        val KEY_CLOUD_SYNC_CODE = stringPreferencesKey("cloud_sync_code")
+        val KEY_LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
+    }
+
+    val syncCodeFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CLOUD_SYNC_CODE] ?: ""
+    }
+
+    val lastSyncTimeFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LAST_SYNC_TIME] ?: ""
+    }
+
+    suspend fun saveSyncCode(code: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_CLOUD_SYNC_CODE] = code
+        }
+    }
+
+    suspend fun saveLastSyncTime(timeStr: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_LAST_SYNC_TIME] = timeStr
+        }
     }
 
     val profileFlow: Flow<TeacherProfile> = context.dataStore.data.map { prefs ->

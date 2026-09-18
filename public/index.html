@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AttendMark - Teacher Attendance & Marks Register</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#EEF2FF',
+              100: '#E0E7FF',
+              500: '#6366F1',
+              600: '#4F46E5',
+              700: '#4338CA',
+              800: '#3730A3',
+              900: '#312E81',
+            },
+            present: '#16A34A',
+            absent: '#DC2626',
+            late: '#D97706',
+            excuse: '#7C3AED',
+            whatsapp: '#25D366'
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printable-report-modal, #printable-report-modal * {
+        visibility: visible;
+      }
+      #printable-report-modal {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 20px;
+        background: white;
+        color: black;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans selection:bg-brand-100 selection:text-brand-900">
+
+  <!-- TOP HEADER -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Brand Logo -->
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-700 flex items-center justify-center text-white shadow-md shadow-indigo-200">
+          <i data-lucide="graduation-cap" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <span class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-700 to-violet-800 bg-clip-text text-transparent">AttendMark</span>
+          <span class="hidden sm:inline-block ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">Web Edition</span>
+        </div>
+      </div>
+
+      <!-- Class Selector & Quick Info -->
+      <div class="flex items-center space-x-3">
+        <div class="flex items-center space-x-2 bg-slate-100/80 hover:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 transition">
+          <i data-lucide="book-open" class="w-4 h-4 text-indigo-600"></i>
+          <select id="class-select" class="bg-transparent text-sm font-semibold text-slate-800 focus:outline-none cursor-pointer pr-1">
+            <!-- Populated via JS -->
+          </select>
+        </div>
+
+        <button onclick="openModal('create-class-modal')" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl border border-indigo-200 transition" title="Add New Class">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Cloud Sync Badge / Button -->
+        <button onclick="openModal('cloud-sync-modal')" id="header-sync-btn" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-xs transition shadow-sm" title="Cloud Sync with Android Phone">
+          <i data-lucide="refresh-cw" id="header-sync-icon" class="w-3.5 h-3.5 text-indigo-600"></i>
+          <span id="header-sync-label">Sync</span>
+        </button>
+
+        <!-- Teacher Profile Pill -->
+        <div onclick="switchTab('profile')" class="hidden md:flex items-center space-x-2 pl-3 border-l border-slate-200 cursor-pointer group">
+          <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs group-hover:bg-indigo-600 group-hover:text-white transition">
+            <span id="header-avatar-initial">T</span>
+          </div>
+          <div class="text-left">
+            <p id="header-teacher-name" class="text-xs font-semibold text-slate-800 group-hover:text-indigo-600 transition leading-tight">Teacher</p>
+            <p id="header-school-name" class="text-[11px] text-slate-500 truncate max-w-[120px] leading-tight">AttendMark Academy</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER WITH SIDEBAR & CONTENT -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full flex flex-col md:flex-row gap-6">
+
+    <!-- DESKTOP SIDEBAR NAVIGATION -->
+    <aside class="w-full md:w-64 shrink-0 no-print hidden md:block">
+      <div class="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-24 space-y-1">
+        
+        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+          <span>Dashboard</span>
+        </button>
+
+        <button onclick="switchTab('attendance')" id="nav-attendance" class="nav-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+          <i data-lucide="calendar-check" class="w-4 h-4"></i>
+          <span>Attendance</span>
+        </button>
+
+        <button onclick="switchTab('marks')" id="nav-marks" class="nav-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+          <i data-lucide="award" class="w-4 h-4"></i>
+          <span>Marks & Reports</span>
+        </button>
+
+        <button onclick="switchTab('students')" id="nav-students" class="nav-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          <span>Students Roster</span>
+        </button>
+
+        <button onclick="switchTab('profile')" id="nav-profile" class="nav-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+          <i data-lucide="user-cog" class="w-4 h-4"></i>
+          <span>Settings & Backup</span>
+        </button>
+
+        <div class="pt-4 mt-4 border-t border-slate-100 px-3">
+          <div class="flex items-center justify-between text-xs text-slate-400 font-medium mb-2">
+            <span>QUICK EXPORT</span>
+          </div>
+          <button onclick="exportMasterCsv()" class="w-full text-left flex items-center space-x-2 text-xs text-indigo-600 hover:text-indigo-800 py-1.5 font-medium transition">
+            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
+            <span>Master Marks CSV</span>
+          </button>
+          <button onclick="exportAttendanceTodayCsv()" class="w-full text-left flex items-center space-x-2 text-xs text-emerald-600 hover:text-emerald-800 py-1.5 font-medium transition">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Today's Attendance CSV</span>
+          </button>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- CONTENT PANELS -->
+    <main class="flex-1 min-w-0 pb-20 md:pb-6">
+
+      <!-- ================= TAB 1: DASHBOARD ================= -->
+      <section id="tab-dashboard" class="space-y-6">
+        
+        <!-- Welcome Banner -->
+        <div class="bg-gradient-to-r from-indigo-700 via-indigo-600 to-violet-700 rounded-3xl p-6 sm:p-8 text-white shadow-lg shadow-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div>
+            <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm text-xs font-medium mb-3">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i>
+              <span id="dash-date-str">Today</span>
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">Welcome back, <span id="dash-greeting-name">Teacher</span></h1>
+            <p class="mt-1 text-indigo-100 text-sm max-w-xl">
+              Ready to record attendance, manage assessments, and communicate updates to parents.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2.5 sm:self-center">
+            <button onclick="switchTab('attendance')" class="bg-white text-indigo-700 hover:bg-indigo-50 px-4 py-2.5 rounded-xl font-semibold text-sm shadow transition flex items-center space-x-2">
+              <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+              <span>Mark Attendance</span>
+            </button>
+            <button onclick="switchTab('marks')" class="bg-indigo-800/60 hover:bg-indigo-800 text-white px-4 py-2.5 rounded-xl font-semibold text-sm border border-white/20 transition flex items-center space-x-2">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i>
+              <span>Add Marks</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Metric Stat Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-4">
+            <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <i data-lucide="users" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <p class="text-xs font-medium text-slate-500">Students in Class</p>
+              <h3 id="dash-stat-students" class="text-2xl font-bold text-slate-900 mt-0.5">0</h3>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-4">
+            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <i data-lucide="user-check" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <p class="text-xs font-medium text-slate-500">Today's Present</p>
+              <h3 id="dash-stat-present" class="text-2xl font-bold text-emerald-600 mt-0.5">0%</h3>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-4">
+            <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <i data-lucide="user-x" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <p class="text-xs font-medium text-slate-500">Today's Absentees</p>
+              <h3 id="dash-stat-absent" class="text-2xl font-bold text-rose-600 mt-0.5">0</h3>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center space-x-4">
+            <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <i data-lucide="file-check" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <p class="text-xs font-medium text-slate-500">Exams Recorded</p>
+              <h3 id="dash-stat-exams" class="text-2xl font-bold text-amber-600 mt-0.5">0</h3>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Quick Action Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          
+          <!-- Attendance Overview Card -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="font-bold text-slate-800 flex items-center space-x-2">
+                <i data-lucide="calendar" class="w-4 h-4 text-indigo-600"></i>
+                <span>Today's Attendance Status</span>
+              </h3>
+              <button onclick="switchTab('attendance')" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700">Open Register &rarr;</button>
+            </div>
+
+            <div id="dash-attendance-preview" class="space-y-3">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Exams & Marks Overview Card -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="font-bold text-slate-800 flex items-center space-x-2">
+                <i data-lucide="award" class="w-4 h-4 text-amber-600"></i>
+                <span>Recent Assessments</span>
+              </h3>
+              <button onclick="switchTab('marks')" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700">Manage Marks &rarr;</button>
+            </div>
+
+            <div id="dash-exams-preview" class="space-y-2">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- ================= TAB 2: ATTENDANCE ================= -->
+      <section id="tab-attendance" class="space-y-5 hidden">
+        
+        <!-- Action & Date Bar -->
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          
+          <!-- Date Picker -->
+          <div class="flex items-center space-x-3">
+            <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm font-semibold">
+              <i data-lucide="calendar" class="w-4 h-4 text-indigo-600"></i>
+              <input type="date" id="attendance-date" class="bg-transparent focus:outline-none cursor-pointer text-slate-800" onchange="renderAttendance()">
+            </div>
+            <button onclick="setTodayDate()" class="text-xs font-semibold px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition">Today</button>
+          </div>
+
+          <!-- Buttons: Export, WhatsApp Notify, Mark All Present -->
+          <div class="flex flex-wrap items-center gap-2">
+            
+            <button onclick="exportAttendanceTodayCsv()" class="px-3 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition flex items-center space-x-1.5">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Export CSV</span>
+            </button>
+
+            <button onclick="notifyAbsenteesWhatsApp()" class="px-3 py-2 text-xs font-semibold text-white bg-whatsapp hover:brightness-105 rounded-xl transition flex items-center space-x-1.5 shadow-sm">
+              <i data-lucide="send" class="w-3.5 h-3.5"></i>
+              <span>WhatsApp Absentees</span>
+            </button>
+
+            <button onclick="markAllPresent()" class="px-4 py-2 text-xs font-bold text-white bg-present hover:brightness-105 rounded-xl transition flex items-center space-x-1.5 shadow-sm">
+              <i data-lucide="check-check" class="w-3.5 h-3.5"></i>
+              <span>All Present</span>
+            </button>
+
+          </div>
+        </div>
+
+        <!-- Attendance Stats Pill Bar -->
+        <div class="grid grid-cols-4 gap-2 text-center">
+          <div class="bg-emerald-50 border border-emerald-200/60 rounded-xl py-2 px-3">
+            <span class="text-xs font-semibold text-emerald-800">Present</span>
+            <p id="att-count-present" class="text-lg font-bold text-emerald-700">0</p>
+          </div>
+          <div class="bg-rose-50 border border-rose-200/60 rounded-xl py-2 px-3">
+            <span class="text-xs font-semibold text-rose-800">Absent</span>
+            <p id="att-count-absent" class="text-lg font-bold text-rose-700">0</p>
+          </div>
+          <div class="bg-amber-50 border border-amber-200/60 rounded-xl py-2 px-3">
+            <span class="text-xs font-semibold text-amber-800">Late</span>
+            <p id="att-count-late" class="text-lg font-bold text-amber-700">0</p>
+          </div>
+          <div class="bg-purple-50 border border-purple-200/60 rounded-xl py-2 px-3">
+            <span class="text-xs font-semibold text-purple-800">Excused</span>
+            <p id="att-count-excused" class="text-lg font-bold text-purple-700">0</p>
+          </div>
+        </div>
+
+        <!-- Attendance Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  <th class="py-3 px-4 w-16">Roll</th>
+                  <th class="py-3 px-4">Student Name</th>
+                  <th class="py-3 px-4 hidden sm:table-cell">Guardian Contact</th>
+                  <th class="py-3 px-4 text-center">Status</th>
+                  <th class="py-3 px-4 text-right">Direct Action</th>
+                </tr>
+              </thead>
+              <tbody id="attendance-list-tbody" class="divide-y divide-slate-100 text-sm">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ================= TAB 3: MARKS & REPORTS ================= -->
+      <section id="tab-marks" class="space-y-5 hidden">
+
+        <!-- Exam Switcher Header -->
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <i data-lucide="award" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <select id="exam-select" class="text-base font-bold text-slate-900 bg-transparent focus:outline-none cursor-pointer" onchange="renderMarks()">
+                  <!-- Populated via JS -->
+                </select>
+              </div>
+              <p id="exam-details-subtitle" class="text-xs text-slate-500">Max Marks: 100 | Type: Unit Test</p>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            
+            <button onclick="openModal('create-exam-modal')" class="px-3 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition flex items-center space-x-1.5 shadow-sm">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>New Exam / Subject</span>
+            </button>
+
+            <button onclick="exportCurrentExamCsv()" class="px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition flex items-center space-x-1.5">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Export Exam CSV</span>
+            </button>
+
+            <button onclick="exportMasterCsv()" class="px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition flex items-center space-x-1.5 border border-indigo-100">
+              <i data-lucide="table-2" class="w-3.5 h-3.5"></i>
+              <span>Master Sheet (All Subjects)</span>
+            </button>
+
+            <button onclick="notifyExamResultsWhatsApp()" class="px-3 py-2 text-xs font-semibold text-white bg-whatsapp hover:brightness-105 rounded-xl transition flex items-center space-x-1.5 shadow-sm">
+              <i data-lucide="send" class="w-3.5 h-3.5"></i>
+              <span>WhatsApp Results</span>
+            </button>
+
+          </div>
+
+        </div>
+
+        <!-- Marks Overview Metric Chips -->
+        <div class="grid grid-cols-3 gap-3 text-center">
+          <div class="bg-white border border-slate-200 rounded-xl py-2 px-3 shadow-sm">
+            <span class="text-xs text-slate-500 font-medium">Class Average</span>
+            <p id="marks-stat-average" class="text-lg font-bold text-indigo-600 mt-0.5">0%</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl py-2 px-3 shadow-sm">
+            <span class="text-xs text-slate-500 font-medium">Highest Score</span>
+            <p id="marks-stat-highest" class="text-lg font-bold text-emerald-600 mt-0.5">0</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-xl py-2 px-3 shadow-sm">
+            <span class="text-xs text-slate-500 font-medium">Pass Rate (&ge;33%)</span>
+            <p id="marks-stat-passrate" class="text-lg font-bold text-amber-600 mt-0.5">0%</p>
+          </div>
+        </div>
+
+        <!-- Student Marks Entry Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  <th class="py-3 px-4 w-16">Roll</th>
+                  <th class="py-3 px-4">Student Name</th>
+                  <th class="py-3 px-4 w-32">Marks Obtained</th>
+                  <th class="py-3 px-4 text-center">Percentage</th>
+                  <th class="py-3 px-4 text-center">Grade</th>
+                  <th class="py-3 px-4 text-center">Rank</th>
+                  <th class="py-3 px-4 text-right">Report Card</th>
+                </tr>
+              </thead>
+              <tbody id="marks-list-tbody" class="divide-y divide-slate-100 text-sm">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ================= TAB 4: STUDENTS ROSTER ================= -->
+      <section id="tab-students" class="space-y-5 hidden">
+
+        <!-- Search and Action Bar -->
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          
+          <div class="relative flex-1 max-w-md">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
+            <input type="text" id="student-search-input" placeholder="Search student by name or roll number..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition" oninput="renderStudents()">
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            
+            <button onclick="downloadStudentTemplateCsv()" class="px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition flex items-center space-x-1.5" title="Download sample CSV for importing">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Sample CSV</span>
+            </button>
+
+            <button onclick="openModal('import-csv-modal')" class="px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition flex items-center space-x-1.5 border border-indigo-100">
+              <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+              <span>Import CSV</span>
+            </button>
+
+            <button onclick="exportStudentsRosterCsv()" class="px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition flex items-center space-x-1.5">
+              <i data-lucide="file-down" class="w-3.5 h-3.5"></i>
+              <span>Export Roster</span>
+            </button>
+
+            <button onclick="openModal('add-student-modal')" class="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition flex items-center space-x-1.5 shadow-sm">
+              <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+              <span>Add Student</span>
+            </button>
+
+          </div>
+
+        </div>
+
+        <!-- Student List -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  <th class="py-3 px-4 w-16">Roll</th>
+                  <th class="py-3 px-4">Student</th>
+                  <th class="py-3 px-4">Guardian Details</th>
+                  <th class="py-3 px-4">WhatsApp Consent</th>
+                  <th class="py-3 px-4">Remarks / Notes</th>
+                  <th class="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="students-list-tbody" class="divide-y divide-slate-100 text-sm">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ================= TAB 5: PROFILE & BACKUP ================= -->
+      <section id="tab-profile" class="space-y-6 hidden">
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          <!-- Teacher Information Card -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+            <div class="flex items-center space-x-3">
+              <div class="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg">
+                <i data-lucide="user" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-slate-900 text-lg">Teacher & School Profile</h3>
+                <p class="text-xs text-slate-500">Printed on official PDF report cards and WhatsApp dispatches</p>
+              </div>
+            </div>
+
+            <div class="space-y-3 pt-2">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Full Name</label>
+                <input type="text" id="prof-name" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">School / Institute Name</label>
+                <input type="text" id="prof-school" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Designation / Department</label>
+                <input type="text" id="prof-designation" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Teacher Phone Number</label>
+                <input type="text" id="prof-phone" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none" placeholder="+1234567890">
+              </div>
+
+              <button onclick="saveProfileSettings()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-xl transition shadow-sm">
+                Save Profile Changes
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Android App Cloud Sync Card -->
+          <div class="bg-gradient-to-br from-indigo-50 to-violet-50 rounded-2xl border border-indigo-200 p-6 shadow-sm space-y-4">
+            <div class="flex items-center space-x-3">
+              <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-indigo-200">
+                <i data-lucide="smartphone" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-slate-900 text-lg">Sync with Android Phone</h3>
+                <p class="text-xs text-slate-500">Pair seamlessly using your private 6-character sync code</p>
+              </div>
+            </div>
+
+            <div class="space-y-3 pt-2 text-sm text-slate-600">
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Connect this web browser directly with the AttendMark Android app. No account or password required.
+              </p>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Enter 6-Character Sync Code</label>
+                <div class="flex items-center space-x-2">
+                  <input type="text" id="sync-code-input" maxlength="8" placeholder="e.g. 7X9K2M" class="uppercase font-mono font-bold tracking-widest text-lg px-4 py-2 bg-white border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none w-full">
+                  <button onclick="pullFromCloud()" id="btn-pull-cloud" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition flex items-center space-x-1.5 shadow-sm shrink-0">
+                    <i data-lucide="cloud-download" class="w-4 h-4"></i>
+                    <span>Pull from Phone</span>
+                  </button>
+                </div>
+                <p id="sync-status-text" class="text-[11px] text-slate-500 mt-1.5">Enter the code shown on your phone's AttendMark app (Settings tab).</p>
+              </div>
+
+              <div class="pt-2 flex items-center space-x-2">
+                <button onclick="pushToCloud()" id="btn-push-cloud" class="w-full py-2.5 bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold text-xs rounded-xl transition flex items-center justify-center space-x-2">
+                  <i data-lucide="cloud-upload" class="w-4 h-4"></i>
+                  <span>Push Web Changes to Phone</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Data Backup & Portability Card -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+            <div class="flex items-center space-x-3">
+              <div class="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg">
+                <i data-lucide="database" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-slate-900 text-lg">Data Backup & Migration</h3>
+                <p class="text-xs text-slate-500">Export or import your AttendMark data as portable JSON</p>
+              </div>
+            </div>
+
+            <div class="space-y-3 pt-2 text-sm text-slate-600">
+              <p class="text-xs leading-relaxed text-slate-500">
+                All classes, students, attendance logs, and exam marks are stored locally on your device for complete privacy.
+              </p>
+
+              <div class="flex flex-col gap-2 pt-2">
+                <button onclick="exportJsonBackup()" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition flex items-center justify-center space-x-2">
+                  <i data-lucide="download" class="w-4 h-4 text-emerald-600"></i>
+                  <span>Download Full JSON Backup</span>
+                </button>
+
+                <label class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition flex items-center justify-center space-x-2 cursor-pointer">
+                  <i data-lucide="upload" class="w-4 h-4 text-indigo-600"></i>
+                  <span>Restore from JSON File</span>
+                  <input type="file" accept=".json" class="hidden" onchange="importJsonBackup(event)">
+                </label>
+              </div>
+
+              <div class="pt-6 border-t border-slate-100">
+                <h4 class="text-xs font-bold text-rose-600 uppercase tracking-wider mb-2">Reset & Danger Zone</h4>
+                <button onclick="resetAllData()" class="w-full py-2 border border-rose-200 text-rose-600 hover:bg-rose-50 font-semibold text-xs rounded-xl transition">
+                  Reset Everything to Defaults
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- FLOATING BOTTOM DOCK FOR MOBILE -->
+  <div class="md:hidden fixed bottom-3 left-4 right-4 z-40 no-print">
+    <div class="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-xl px-2 py-1.5 flex items-center justify-around">
+      
+      <button onclick="switchTab('dashboard')" id="mob-nav-dashboard" class="flex flex-col items-center py-1 px-2.5 text-indigo-600 transition">
+        <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold mt-0.5">Dash</span>
+      </button>
+
+      <button onclick="switchTab('attendance')" id="mob-nav-attendance" class="flex flex-col items-center py-1 px-2.5 text-slate-400 hover:text-slate-700 transition">
+        <i data-lucide="calendar-check" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium mt-0.5">Attend</span>
+      </button>
+
+      <button onclick="switchTab('marks')" id="mob-nav-marks" class="flex flex-col items-center py-1 px-2.5 text-slate-400 hover:text-slate-700 transition">
+        <i data-lucide="award" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium mt-0.5">Marks</span>
+      </button>
+
+      <button onclick="switchTab('students')" id="mob-nav-students" class="flex flex-col items-center py-1 px-2.5 text-slate-400 hover:text-slate-700 transition">
+        <i data-lucide="users" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium mt-0.5">Roster</span>
+      </button>
+
+      <button onclick="switchTab('profile')" id="mob-nav-profile" class="flex flex-col items-center py-1 px-2.5 text-slate-400 hover:text-slate-700 transition">
+        <i data-lucide="user-cog" class="w-5 h-5"></i>
+        <span class="text-[10px] font-medium mt-0.5">More</span>
+      </button>
+
+    </div>
+  </div>
+
+
+  <!-- ================= MODALS ================= -->
+
+  <!-- MODAL: ADD STUDENT -->
+  <div id="add-student-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden no-print">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-lg text-slate-900">Add New Student</h3>
+        <button onclick="closeModal('add-student-modal')" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleCreateStudent(event)" class="space-y-3 text-sm">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Student Full Name *</label>
+          <input type="text" id="new-stu-name" required placeholder="e.g. Maya Johnson" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Roll / Seat Number *</label>
+          <input type="text" id="new-stu-roll" required placeholder="e.g. 101" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Guardian / Parent Name</label>
+          <input type="text" id="new-stu-guardian" placeholder="e.g. Sarah Johnson" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Guardian Phone (with Country Code) *</label>
+          <input type="text" id="new-stu-phone" required placeholder="e.g. +14155552671" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
+        <div class="flex items-center space-x-2 pt-1">
+          <input type="checkbox" id="new-stu-consent" checked class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer">
+          <label for="new-stu-consent" class="text-xs text-slate-600 cursor-pointer">Guardian consented to WhatsApp updates</label>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Notes / Remarks (Optional)</label>
+          <input type="text" id="new-stu-notes" placeholder="Special requirements, bus route, etc." class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-3">
+          <button type="button" onclick="closeModal('add-student-modal')" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm">Add Student</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- MODAL: CREATE CLASS -->
+  <div id="create-class-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden no-print">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-lg text-slate-900">Create New Class</h3>
+        <button onclick="closeModal('create-class-modal')" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleCreateClass(event)" class="space-y-3 text-sm">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Class Name *</label>
+          <input type="text" id="new-cls-name" required placeholder="e.g. Grade 10 - Science" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Section</label>
+          <input type="text" id="new-cls-section" placeholder="e.g. A or Room 204" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Academic Year</label>
+          <input type="text" id="new-cls-year" value="2024-2025" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-3">
+          <button type="button" onclick="closeModal('create-class-modal')" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm">Save Class</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- MODAL: CREATE EXAM -->
+  <div id="create-exam-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden no-print">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-lg text-slate-900">Add Subject / Exam</h3>
+        <button onclick="closeModal('create-exam-modal')" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleCreateExam(event)" class="space-y-3 text-sm">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Subject / Exam Name *</label>
+          <input type="text" id="new-exam-name" required placeholder="e.g. Mathematics" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Max Marks *</label>
+          <input type="number" id="new-exam-max" required value="100" min="1" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Exam Type</label>
+          <select id="new-exam-type" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none bg-white">
+            <option value="UNIT_TEST">Unit Test</option>
+            <option value="MIDTERM">Midterm</option>
+            <option value="FINAL">Final Exam</option>
+            <option value="QUIZ">Quiz / Assignment</option>
+          </select>
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-3">
+          <button type="button" onclick="closeModal('create-exam-modal')" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm">Save Exam</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- MODAL: CSV IMPORT -->
+  <div id="import-csv-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden no-print">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-lg text-slate-900">Import Students via CSV</h3>
+        <button onclick="closeModal('import-csv-modal')" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs text-slate-600">
+        <p>Upload a standard CSV file. Expected columns: <strong>name, roll_no, guardian_name, guardian_phone, notes</strong>.</p>
+        
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+          <span>Need a starter template?</span>
+          <button onclick="downloadStudentTemplateCsv()" class="text-indigo-600 font-semibold hover:underline flex items-center space-x-1">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Download CSV Template</span>
+          </button>
+        </div>
+
+        <div class="pt-2">
+          <input type="file" id="csv-file-input" accept=".csv" class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-4">
+          <button type="button" onclick="closeModal('import-csv-modal')" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button>
+          <button type="button" onclick="processCsvImport()" class="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm">Import Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- MODAL: PRINTABLE CONSOLIDATED REPORT CARD -->
+  <div id="printable-report-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-2xl w-full p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+      
+      <!-- Modal Toolbar -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4 no-print">
+        <h3 class="font-bold text-lg text-slate-900">Student Consolidated Report Card</h3>
+        <div class="flex items-center space-x-2">
+          <button onclick="window.print()" class="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl flex items-center space-x-1.5 shadow-sm">
+            <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+            <span>Print / Save as PDF</span>
+          </button>
+          <button onclick="closeModal('printable-report-modal')" class="p-2 text-slate-400 hover:text-slate-600 rounded-xl">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- OFFICIAL A4 REPORT CARD CONTENT -->
+      <div class="border-2 border-indigo-900/20 rounded-2xl p-6 sm:p-8 space-y-6 bg-white text-slate-800">
+        
+        <!-- Header -->
+        <div class="text-center border-b-2 border-indigo-800 pb-4">
+          <h2 id="rep-school-name" class="text-2xl font-black text-indigo-900 uppercase tracking-wide">AttendMark Academy</h2>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest mt-1">Official Student Assessment & Academic Report</p>
+          <p id="rep-academic-year" class="text-xs text-indigo-600 font-bold mt-0.5">Session: 2024-2025</p>
+        </div>
+
+        <!-- Student Meta Details Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+          <div>
+            <span class="text-slate-400 font-medium">Student Name:</span>
+            <p id="rep-student-name" class="font-bold text-slate-900 text-sm mt-0.5">-</p>
+          </div>
+          <div>
+            <span class="text-slate-400 font-medium">Roll Number:</span>
+            <p id="rep-student-roll" class="font-bold text-slate-900 text-sm mt-0.5">-</p>
+          </div>
+          <div>
+            <span class="text-slate-400 font-medium">Class & Section:</span>
+            <p id="rep-class-name" class="font-bold text-slate-900 text-sm mt-0.5">-</p>
+          </div>
+          <div>
+            <span class="text-slate-400 font-medium">Guardian Contact:</span>
+            <p id="rep-student-phone" class="font-bold text-slate-900 text-sm mt-0.5">-</p>
+          </div>
+        </div>
+
+        <!-- Subjects & Marks Table -->
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Subject Performance Summary</h4>
+          <table class="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
+            <thead class="bg-indigo-900 text-white font-semibold">
+              <tr>
+                <th class="py-2.5 px-3">Subject / Exam</th>
+                <th class="py-2.5 px-3 text-center">Max Marks</th>
+                <th class="py-2.5 px-3 text-center">Marks Obtained</th>
+                <th class="py-2.5 px-3 text-center">Percentage</th>
+                <th class="py-2.5 px-3 text-center">Grade</th>
+                <th class="py-2.5 px-3 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody id="rep-marks-tbody" class="divide-y divide-slate-200">
+              <!-- Rendered via JS -->
+            </tbody>
+            <tfoot class="bg-indigo-50 font-bold text-indigo-950 border-t-2 border-indigo-200">
+              <tr>
+                <td class="py-2.5 px-3">OVERALL CUMULATIVE</td>
+                <td id="rep-total-max" class="py-2.5 px-3 text-center">-</td>
+                <td id="rep-total-obtained" class="py-2.5 px-3 text-center">-</td>
+                <td id="rep-total-pct" class="py-2.5 px-3 text-center">-</td>
+                <td id="rep-total-grade" class="py-2.5 px-3 text-center">-</td>
+                <td id="rep-total-status" class="py-2.5 px-3 text-center">-</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- Teacher Remarks & Signatures -->
+        <div class="pt-8 grid grid-cols-2 gap-8 text-center text-xs">
+          <div class="border-t border-slate-300 pt-2">
+            <p id="rep-teacher-signature" class="font-bold text-slate-800">Class Teacher</p>
+            <span class="text-slate-400">Signature & Remarks</span>
+          </div>
+          <div class="border-t border-slate-300 pt-2">
+            <p class="font-bold text-slate-800">Principal / Head of School</p>
+            <span class="text-slate-400">Institutional Seal</span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: CLOUD SYNC -->
+  <div id="cloud-sync-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden no-print">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
+            <i data-lucide="cloud-sync" class="w-4 h-4"></i>
+          </div>
+          <h3 class="font-bold text-base text-slate-900">Sync with Phone</h3>
+        </div>
+        <button onclick="closeModal('cloud-sync-modal')" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs text-slate-600">
+        <p>Enter the 6-character code displayed in the <strong>Settings tab</strong> of your AttendMark phone app:</p>
+
+        <div>
+          <input type="text" id="modal-sync-code-input" maxlength="8" placeholder="e.g. 7X9K2M" class="w-full text-center uppercase font-mono font-extrabold tracking-widest text-xl px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+
+        <p id="modal-sync-status" class="text-[11px] text-slate-500 text-center">Free instant two-way synchronization.</p>
+
+        <div class="grid grid-cols-2 gap-2 pt-2">
+          <button onclick="pullFromCloudModal()" id="btn-modal-pull" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1 shadow-sm">
+            <i data-lucide="cloud-download" class="w-3.5 h-3.5"></i>
+            <span>Pull Phone Data</span>
+          </button>
+          <button onclick="pushToCloudModal()" id="btn-modal-push" class="w-full py-2.5 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1">
+            <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i>
+            <span>Push Web Data</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none no-print"></div>
+
+  <!-- Include Web Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

@@ -17,11 +17,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
@@ -29,7 +34,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -69,6 +76,13 @@ fun ProfileScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val profile by repository.profileFlow.collectAsState(initial = TeacherProfile())
+    val storedSyncCode by repository.syncCodeFlow.collectAsState(initial = "")
+    val lastSyncTime by repository.lastSyncTimeFlow.collectAsState(initial = "")
+
+    var currentSyncCode by remember(storedSyncCode) {
+        mutableStateOf(if (storedSyncCode.isNotBlank()) storedSyncCode else com.example.core.sync.SyncManager.generateSyncCode())
+    }
+    var isSyncing by remember { mutableStateOf(false) }
 
     var fullName by remember(profile) { mutableStateOf(profile.fullName) }
     var phoneE164 by remember(profile) { mutableStateOf(profile.phoneE164) }
@@ -151,23 +165,172 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Notice Banner
+            // Web Companion & Cloud Sync Card
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.CloudSync, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Web Companion & Cloud Sync",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "Pair with your computer / browser",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     Text(
-                        text = "100% Offline-First. No external servers or cloud accounts. All data resides securely on this phone.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Your Private 6-Character Sync Code:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = currentSyncCode,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 4.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("Sync Code", currentSyncCode)
+                                clipboard?.setPrimaryClip(clip)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Sync code $currentSyncCode copied to clipboard")
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy code", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(
+                            onClick = {
+                                val newCode = com.example.core.sync.SyncManager.generateSyncCode()
+                                currentSyncCode = newCode
+                                scope.launch {
+                                    repository.saveSyncCode(newCode)
+                                    snackbarHostState.showSnackbar("Generated new Sync Code: $newCode")
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Generate new code", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    if (lastSyncTime.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Last synced: $lastSyncTime",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = {
+                                if (isSyncing) return@Button
+                                isSyncing = true
+                                scope.launch {
+                                    repository.saveSyncCode(currentSyncCode)
+                                    val result = repository.syncPush(currentSyncCode)
+                                    isSyncing = false
+                                    when (result) {
+                                        is com.example.core.sync.SyncResult.Success -> {
+                                            snackbarHostState.showSnackbar("Uploaded to cloud! Enter code '$currentSyncCode' on Web")
+                                        }
+                                        is com.example.core.sync.SyncResult.Error -> {
+                                            snackbarHostState.showSnackbar("Sync error: ${result.message}")
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !isSyncing,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            if (isSyncing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Syncing...")
+                            } else {
+                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Upload to Web")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                if (isSyncing) return@OutlinedButton
+                                isSyncing = true
+                                scope.launch {
+                                    repository.saveSyncCode(currentSyncCode)
+                                    val result = repository.syncPull(currentSyncCode)
+                                    isSyncing = false
+                                    when (result) {
+                                        is com.example.core.sync.SyncResult.Success -> {
+                                            snackbarHostState.showSnackbar("Received: ${result.message}")
+                                        }
+                                        is com.example.core.sync.SyncResult.Error -> {
+                                            snackbarHostState.showSnackbar(result.message)
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !isSyncing,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Download")
+                        }
+                    }
                 }
             }
 

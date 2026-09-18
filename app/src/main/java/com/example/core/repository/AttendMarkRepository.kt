@@ -32,6 +32,15 @@ class AttendMarkRepository(context: Context) {
     private val messageLogDao = db.messageLogDao()
     private val templateDao = db.messageTemplateDao()
     val preferencesManager = PreferencesManager(context)
+    val syncManager = com.example.core.sync.SyncManager(context, preferencesManager)
+
+    // Sync state flows
+    val syncCodeFlow: Flow<String> = preferencesManager.syncCodeFlow
+    val lastSyncTimeFlow: Flow<String> = preferencesManager.lastSyncTimeFlow
+
+    suspend fun saveSyncCode(code: String) = preferencesManager.saveSyncCode(code)
+    suspend fun syncPush(code: String) = syncManager.pushToCloud(code)
+    suspend fun syncPull(code: String) = syncManager.pullFromCloud(code)
 
     // Profile & Preferences
     val profileFlow: Flow<TeacherProfile> = preferencesManager.profileFlow
