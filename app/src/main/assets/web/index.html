@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' cdn.tailwindcss.com unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data:; connect-src 'self';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AttendMark - Teacher Attendance & Marks Register</title>
   <!-- Tailwind CSS CDN -->
@@ -65,6 +66,107 @@
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans selection:bg-brand-100 selection:text-brand-900">
 
+  <!-- ================= SPLASH SCREEN ================= -->
+  <div id="splash-screen" class="fixed inset-0 bg-slate-900 z-[60] flex flex-col items-center justify-center transition-all duration-700">
+    <div class="text-center space-y-4 animate-pulse">
+      <div class="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-2xl mx-auto">
+        <i data-lucide="graduation-cap" class="w-12 h-12"></i>
+      </div>
+      <div class="space-y-1">
+        <h1 class="text-3xl font-black text-white tracking-wider">AttendMark</h1>
+        <p class="text-xs text-indigo-200 font-medium tracking-widest uppercase">Web Companion Edition</p>
+      </div>
+    </div>
+    
+    <!-- Pulse loader -->
+    <div class="absolute bottom-12 flex flex-col items-center space-y-2">
+      <div class="flex space-x-1.5">
+        <div class="w-2.5 h-2.5 bg-indigo-400 rounded-full animate-bounce"></div>
+        <div class="w-2.5 h-2.5 bg-indigo-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+        <div class="w-2.5 h-2.5 bg-indigo-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+      </div>
+      <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Securing Connection...</span>
+    </div>
+  </div>
+
+  <!-- ================= ONBOARDING / STARTING SCREEN ================= -->
+  <div id="onboarding-overlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[460px]">
+      
+      <!-- Left Sidebar (Hero Info / Brand) -->
+      <div class="w-full md:w-5/12 bg-gradient-to-br from-indigo-700 to-violet-800 p-8 text-white flex flex-col justify-between">
+        <div class="space-y-4">
+          <div class="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center">
+            <i data-lucide="graduation-cap" class="w-7 h-7 text-white"></i>
+          </div>
+          <div>
+            <h2 class="text-2xl font-extrabold tracking-tight">AttendMark</h2>
+            <p class="text-xs text-indigo-100/80 mt-1">Smart Attendance & Academic Marks Tracker</p>
+          </div>
+        </div>
+        
+        <div class="space-y-3.5 mt-8 md:mt-0">
+          <div class="flex items-start space-x-2.5 text-xs">
+            <i data-lucide="shield-check" class="w-4 h-4 text-amber-400 mt-0.5 shrink-0"></i>
+            <span><strong>100% Privacy:</strong> All teacher, roster, and grades data are stored securely on your local device.</span>
+          </div>
+          <div class="flex items-start space-x-2.5 text-xs">
+            <i data-lucide="database" class="w-4 h-4 text-emerald-400 mt-0.5 shrink-0"></i>
+            <span><strong>Offline-First:</strong> Works fully without an internet connection. Complete control of backups.</span>
+          </div>
+          <div class="flex items-start space-x-2.5 text-xs">
+            <i data-lucide="graduation-cap" class="w-4 h-4 text-sky-400 mt-0.5 shrink-0"></i>
+            <span><strong>PDF & WhatsApp:</strong> Easily generate reports, dispatch WhatsApp reminders, and log records.</span>
+          </div>
+        </div>
+        
+        <p class="text-[10px] text-indigo-200/60 mt-6 md:mt-0">&copy; 2026 AttendMark. All rights reserved.</p>
+      </div>
+      
+      <!-- Right Pane (Action / Details / Signup) -->
+      <div class="flex-1 p-8 flex flex-col justify-between space-y-6">
+        <div>
+          <!-- Header -->
+          <div class="pb-3 mb-5 border-b border-slate-100">
+            <h3 class="text-lg font-bold text-slate-800">Create Teacher Account</h3>
+            <p class="text-xs text-slate-500 mt-1">Set up your teacher profile locally to get started instantly.</p>
+          </div>
+          
+          <div class="space-y-3.5">
+            <p class="text-xs text-slate-600 leading-relaxed">
+              Start completely fresh right here in your browser. Enter your details below to create your teacher profile and start adding classes.
+            </p>
+            
+            <form onsubmit="handleOnboardLocal(event)" class="space-y-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Teacher Full Name *</label>
+                <input type="text" id="onboard-name" required placeholder="e.g. Alex Rivera" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">School / Institute Name *</label>
+                <input type="text" id="onboard-school" required placeholder="e.g. St. Xavier's International School" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+              </div>
+              <div class="pt-2">
+                <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition">
+                  Create Local Account &rarr;
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+        
+        <div class="text-[11px] text-slate-400 border-t border-slate-50 pt-3 flex justify-between items-center">
+          <span>Need the phone app?</span>
+          <a href="/attendmark.apk" download class="text-indigo-600 font-bold hover:underline flex items-center space-x-1">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Get APK</span>
+          </a>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+
   <!-- TOP HEADER -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -92,6 +194,16 @@
         <button onclick="openModal('create-class-modal')" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl border border-indigo-200 transition" title="Add New Class">
           <i data-lucide="plus" class="w-4 h-4"></i>
         </button>
+
+        <button onclick="deleteCurrentClass()" class="p-2 text-rose-600 hover:bg-rose-50 rounded-xl border border-rose-200 transition" title="Delete Selected Class">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Direct APK Download Button -->
+        <a href="/attendmark.apk" download="attendmark.apk" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-sm" title="Download Android App (APK)">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span>Download APK</span>
+        </a>
 
         <!-- Cloud Sync Badge / Button -->
         <button onclick="openModal('cloud-sync-modal')" id="header-sync-btn" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-xs transition shadow-sm" title="Cloud Sync with Android Phone">
@@ -520,6 +632,12 @@
               </div>
             </div>
 
+            <!-- Local storage disclosure -->
+            <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3.5 flex items-start space-x-2.5 text-xs text-indigo-800">
+              <i data-lucide="shield-alert" class="w-4 h-4 text-indigo-600 shrink-0 mt-0.5"></i>
+              <span><strong>🔒 Local-Only Storage:</strong> All your teacher info, student rosters, exam scores, and attendance logs are stored 100% locally on this device. No external servers are used, ensuring absolute privacy.</span>
+            </div>
+
             <div class="space-y-3 pt-2">
               <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">Full Name</label>
@@ -547,40 +665,58 @@
             </div>
           </div>
 
-          <!-- Live Android App Cloud Sync Card -->
-          <div class="bg-gradient-to-br from-indigo-50 to-violet-50 rounded-2xl border border-indigo-200 p-6 shadow-sm space-y-4">
+          <!-- Android App Offline Card -->
+          <div class="bg-gradient-to-br from-indigo-50 to-slate-50 rounded-2xl border border-indigo-100 p-6 shadow-sm space-y-4">
             <div class="flex items-center space-x-3">
               <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-indigo-200">
                 <i data-lucide="smartphone" class="w-6 h-6"></i>
               </div>
               <div>
-                <h3 class="font-bold text-slate-900 text-lg">Sync with Android Phone</h3>
-                <p class="text-xs text-slate-500">Pair seamlessly using your private 6-character sync code</p>
+                <h3 class="font-bold text-slate-900 text-lg">Android Mobile App</h3>
+                <p class="text-xs text-slate-500">Track attendance and grades on your phone offline</p>
               </div>
             </div>
 
             <div class="space-y-3 pt-2 text-sm text-slate-600">
               <p class="text-xs text-slate-600 leading-relaxed">
-                Connect this web browser directly with the AttendMark Android app. No account or password required.
+                Take your classes, students, exams, and attendance tracking with you on the go! Use the Android application to track records, and manage them beautifully in a mobile-optimized Material Design 3 interface.
               </p>
 
-              <div>
-                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Enter 6-Character Sync Code</label>
-                <div class="flex items-center space-x-2">
-                  <input type="text" id="sync-code-input" maxlength="8" placeholder="e.g. 7X9K2M" class="uppercase font-mono font-bold tracking-widest text-lg px-4 py-2 bg-white border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none w-full">
-                  <button onclick="pullFromCloud()" id="btn-pull-cloud" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition flex items-center space-x-1.5 shadow-sm shrink-0">
-                    <i data-lucide="cloud-download" class="w-4 h-4"></i>
-                    <span>Pull from Phone</span>
-                  </button>
-                </div>
-                <p id="sync-status-text" class="text-[11px] text-slate-500 mt-1.5">Enter the code shown on your phone's AttendMark app (Settings tab).</p>
+              <div class="pt-2">
+                <a href="/attendmark.apk" download="attendmark.apk" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition flex items-center justify-center space-x-2 shadow-sm">
+                  <i data-lucide="download" class="w-4 h-4"></i>
+                  <span>Download Phone App APK (27 MB)</span>
+                </a>
               </div>
+            </div>
+          </div>
 
-              <div class="pt-2 flex items-center space-x-2">
-                <button onclick="pushToCloud()" id="btn-push-cloud" class="w-full py-2.5 bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold text-xs rounded-xl transition flex items-center justify-center space-x-2">
-                  <i data-lucide="cloud-upload" class="w-4 h-4"></i>
-                  <span>Push Web Changes to Phone</span>
-                </button>
+          <!-- Windows Desktop App Offline Card -->
+          <div class="bg-gradient-to-br from-indigo-50 to-slate-50 rounded-2xl border border-indigo-100 p-6 shadow-sm space-y-4">
+            <div class="flex items-center space-x-3">
+              <div class="w-12 h-12 rounded-2xl bg-slate-800 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-slate-300">
+                <i data-lucide="monitor" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-slate-900 text-lg">Windows Desktop App</h3>
+                <p class="text-xs text-slate-500">Native Windows client for complete offline desktop use</p>
+              </div>
+            </div>
+
+            <div class="space-y-3 pt-2 text-sm text-slate-600">
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Enjoy a fully native, distraction-free desktop experience on Windows. Runs independently of your browser as a lightweight desktop app, saving all records locally.
+              </p>
+
+              <div class="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <a href="/attendmarksetup.exe" download="AttendMarkSetup.exe" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition flex items-center justify-center space-x-2 shadow-sm">
+                  <i data-lucide="package" class="w-4 h-4"></i>
+                  <span>Download Standalone Installer (EXE)</span>
+                </a>
+                <a href="/attendmark-windows.zip" download="attendmark-windows.zip" class="w-full py-2.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-xs rounded-xl transition flex items-center justify-center space-x-2">
+                  <i data-lucide="download" class="w-4 h-4"></i>
+                  <span>Portable ZIP</span>
+                </a>
               </div>
             </div>
           </div>
@@ -616,9 +752,9 @@
               </div>
 
               <div class="pt-6 border-t border-slate-100">
-                <h4 class="text-xs font-bold text-rose-600 uppercase tracking-wider mb-2">Reset & Danger Zone</h4>
+                <h4 class="text-xs font-bold text-rose-600 uppercase tracking-wider mb-2">Delete Account & Danger Zone</h4>
                 <button onclick="resetAllData()" class="w-full py-2 border border-rose-200 text-rose-600 hover:bg-rose-50 font-semibold text-xs rounded-xl transition">
-                  Reset Everything to Defaults
+                  Delete Account & Purge Data
                 </button>
               </div>
             </div>
@@ -926,10 +1062,10 @@
     <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-2">
-          <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
-            <i data-lucide="cloud-sync" class="w-4 h-4"></i>
+          <div class="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center">
+            <i data-lucide="database" class="w-4 h-4"></i>
           </div>
-          <h3 class="font-bold text-base text-slate-900">Sync with Phone</h3>
+          <h3 class="font-bold text-base text-slate-900">Firebase Firestore Sync</h3>
         </div>
         <button onclick="closeModal('cloud-sync-modal')" class="text-slate-400 hover:text-slate-600">
           <i data-lucide="x" class="w-5 h-5"></i>
@@ -937,23 +1073,31 @@
       </div>
 
       <div class="space-y-3 text-xs text-slate-600">
-        <p>Enter the 6-character code displayed in the <strong>Settings tab</strong> of your AttendMark phone app:</p>
+        <p>Sync your phone and web app using your <strong>Firebase Project ID</strong>:</p>
 
-        <div>
-          <input type="text" id="modal-sync-code-input" maxlength="8" placeholder="e.g. 7X9K2M" class="w-full text-center uppercase font-mono font-extrabold tracking-widest text-xl px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        <div class="space-y-2">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 mb-0.5">Firebase Project ID</label>
+            <input type="text" id="modal-firebase-project-input" placeholder="e.g. attendmark-84321" class="w-full font-mono font-bold text-sm px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 mb-0.5">Web API Key (Optional)</label>
+            <input type="text" id="modal-firebase-apikey-input" placeholder="e.g. AIzaSy..." class="w-full font-mono text-xs px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
         </div>
 
-        <p id="modal-sync-status" class="text-[11px] text-slate-500 text-center">Free instant two-way synchronization.</p>
+        <p id="modal-sync-status" class="text-[11px] text-slate-500 text-center">Free real-time two-way Firestore synchronization.</p>
 
-        <div class="grid grid-cols-2 gap-2 pt-2">
-          <button onclick="pullFromCloudModal()" id="btn-modal-pull" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1 shadow-sm">
-            <i data-lucide="cloud-download" class="w-3.5 h-3.5"></i>
-            <span>Pull Phone Data</span>
+        <div class="space-y-2 pt-2">
+          <button onclick="saveAndActivateDirectSyncModal()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1.5 shadow-sm">
+            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+            <span>Save & Activate Direct Sync</span>
           </button>
-          <button onclick="pushToCloudModal()" id="btn-modal-push" class="w-full py-2.5 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1">
-            <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i>
-            <span>Push Web Data</span>
-          </button>
+          
+          <div class="text-[10px] text-emerald-600 font-semibold flex items-center justify-center space-x-1.5 bg-emerald-50 border border-emerald-100 p-2 rounded-xl">
+            <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shrink-0"></span>
+            <span>Local edits auto-upload. Phone edits auto-poll every 8 seconds.</span>
+          </div>
         </div>
       </div>
     </div>
