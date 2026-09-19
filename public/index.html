@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' cdn.tailwindcss.com unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data:; connect-src 'self';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AttendMark - Teacher Attendance & Marks Register</title>
   <!-- Tailwind CSS CDN -->
@@ -707,10 +708,14 @@
                 Enjoy a fully native, distraction-free desktop experience on Windows. Runs independently of your browser as a lightweight desktop app, saving all records locally.
               </p>
 
-              <div class="pt-2">
-                <a href="/attendmark-windows.zip" download="attendmark-windows.zip" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition flex items-center justify-center space-x-2 shadow-sm">
+              <div class="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <a href="/AttendMarkSetup.exe" download="AttendMarkSetup.exe" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition flex items-center justify-center space-x-2 shadow-sm">
+                  <i data-lucide="package" class="w-4 h-4"></i>
+                  <span>Download Standalone Installer (EXE)</span>
+                </a>
+                <a href="/attendmark-windows.zip" download="attendmark-windows.zip" class="w-full py-2.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-xs rounded-xl transition flex items-center justify-center space-x-2">
                   <i data-lucide="download" class="w-4 h-4"></i>
-                  <span>Download Windows App (ZIP)</span>
+                  <span>Portable ZIP</span>
                 </a>
               </div>
             </div>
