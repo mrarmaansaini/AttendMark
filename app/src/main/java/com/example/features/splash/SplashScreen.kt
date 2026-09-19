@@ -3,7 +3,9 @@ package com.example.features.splash
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,11 +35,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import kotlinx.coroutines.delay
 
 @Composable
@@ -82,26 +87,19 @@ fun SplashScreen(
                 .alpha(alpha.value)
                 .padding(32.dp)
         ) {
-            // App Branding Icon with Gradient & Shadow
+            // App Branding Icon with Rounded Card & Glow
             Box(
                 modifier = Modifier
                     .size(96.dp)
-                    .clip(CircleShape)
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFF2563EB), // Blue 600
-                                Color(0xFF0D9488)  // Teal 600
-                            )
-                        )
-                    ),
+                    .shadow(16.dp, RoundedCornerShape(24.dp))
+                    .clip(RoundedCornerShape(24.dp))
+                    .border(1.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.School,
+                Image(
+                    painter = painterResource(id = R.drawable.img_app_icon),
                     contentDescription = "AttendMark Logo",
-                    tint = Color.White,
-                    modifier = Modifier.size(54.dp)
+                    modifier = Modifier.fillMaxSize()
                 )
             }
 
