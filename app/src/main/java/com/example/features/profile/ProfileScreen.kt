@@ -163,162 +163,45 @@ fun ProfileScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            var pairingCode by remember { mutableStateOf("") }
-
-            // Firebase Cloud Sync / Pairing Card
+            // Local-Only Storage Info Card
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
-                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                ),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.CloudSync, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Link Web Companion",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                text = "Instantly sync with the computer edition without setting up databases",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    if (storedProjectId == "attendmark-sync") {
-                        // Linked/Paired state
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
-                                .padding(12.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                        .clip(CircleShape)
-                                        .background(androidx.compose.ui.graphics.Color(0xFF4CAF50))
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Connected & Active",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Direct Sync Active: Auto-upload & Auto-poll are enabled.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (lastSyncTime.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Last synced: $lastSyncTime",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    repository.saveFirebaseConfig("", "")
-                                    snackbarHostState.showSnackbar("Disconnected from Web Companion")
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Disconnect Companion")
-                        }
-                    } else {
-                        // Unpaired state
-                        OutlinedTextField(
-                            value = pairingCode,
-                            onValueChange = { pairingCode = it },
-                            label = { Text("6-Digit Pairing Code") },
-                            placeholder = { Text("e.g. AM-843920") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp)
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = "Verified Local Privacy",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "🔒 Local-Only Storage",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
                         )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Button(
-                            onClick = {
-                                if (pairingCode.isBlank()) {
-                                    scope.launch { snackbarHostState.showSnackbar("Enter the 6-digit pairing code from your Web App") }
-                                    return@Button
-                                }
-                                if (isSyncing) return@Button
-                                isSyncing = true
-                                scope.launch {
-                                    val result = repository.resolvePairingCode(pairingCode)
-                                    isSyncing = false
-                                    when (result) {
-                                        is com.example.core.sync.SyncResult.Success -> {
-                                            snackbarHostState.showSnackbar("Linked and synced successfully!")
-                                        }
-                                        is com.example.core.sync.SyncResult.Error -> {
-                                            snackbarHostState.showSnackbar(result.message)
-                                        }
-                                    }
-                                }
-                            },
-                            enabled = !isSyncing,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            if (isSyncing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Linking Companion...")
-                            } else {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Link Companion")
-                            }
-                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "All your teacher details, classes, students, exam grades, and attendance logs are stored 100% locally on this device. No external servers are utilized, ensuring complete privacy.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text("Profile Information", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
@@ -407,8 +290,14 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.height(28.dp))
 
             // Privacy & Data Destruction Section
-            Text("Privacy & Security", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
+            Text("Delete Account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Wipe your local teacher profile, delete all classes, student rosters, exam marks, and start completely fresh from the onboarding screen.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(10.dp))
 
             OutlinedButton(
                 onClick = { showDeleteConfirmDialog = true },
@@ -418,7 +307,7 @@ fun ProfileScreen(
             ) {
                 Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Delete All My Data (Reset App)")
+                Text("Delete Account & Clean Reset")
             }
 
             Spacer(modifier = Modifier.height(24.dp))

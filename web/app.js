@@ -949,13 +949,15 @@ function importJsonBackup(event) {
 }
 
 function resetAllData() {
-  if (!confirm("Are you absolutely sure? This will wipe all classes, students, and marks in the Web Edition.")) return;
-  localStorage.removeItem(STORAGE_KEY);
+  if (!confirm("Are you absolutely sure you want to delete your account? This will permanently wipe all classes, student rosters, exam marks, and attendance records on this device.")) return;
+  localStorage.clear();
   db = JSON.parse(JSON.stringify(defaultDb));
   saveDatabase();
   renderClassSelector();
-  switchTab('dashboard');
-  showToast("All data reset to factory defaults", "info");
+  
+  // Show onboarding screen
+  document.getElementById("onboarding-overlay").classList.remove("hidden");
+  showToast("Account deleted and database purged completely.", "success");
 }
 
 function downloadCsv(content, filename) {
@@ -1412,92 +1414,7 @@ function deleteCurrentClass() {
   showToast("Class and associated records successfully deleted.", "success");
 }
 
-// ---------------- Onboarding & Pairing UI Helpers ---------------- //
-
-function switchOnboardTab(tab) {
-  const pairBtn = document.getElementById("onboard-tab-pair-btn");
-  const localBtn = document.getElementById("onboard-tab-local-btn");
-  const pairTab = document.getElementById("onboard-tab-pair");
-  const localTab = document.getElementById("onboard-tab-local");
-  
-  if (tab === 'pair') {
-    pairTab.classList.remove("hidden");
-    localTab.classList.add("hidden");
-    pairBtn.className = "text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 pb-1 px-1 transition focus:outline-none";
-    localBtn.className = "text-sm font-medium text-slate-400 hover:text-slate-700 pb-1 px-1 transition focus:outline-none";
-  } else {
-    pairTab.classList.add("hidden");
-    localTab.classList.remove("hidden");
-    pairBtn.className = "text-sm font-medium text-slate-400 hover:text-slate-700 pb-1 px-1 transition focus:outline-none";
-    localBtn.className = "text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 pb-1 px-1 transition focus:outline-none";
-  }
-}
-
-let pairingPollInterval = null;
-
-function getLocalSyncId() {
-  let syncId = localStorage.getItem("attendmark_sync_id");
-  if (!syncId) {
-    syncId = "sid_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    localStorage.setItem("attendmark_sync_id", syncId);
-  }
-  return syncId;
-}
-
-function initOnboardingPairing() {
-  const digits = Math.floor(100000 + Math.random() * 900000);
-  const code = `AM-${digits}`;
-  document.getElementById("onboard-pairing-code").innerText = code;
-  
-  const syncId = getLocalSyncId();
-  
-  // Register pairing code in Firebase
-  const firestoreBody = {
-    fields: {
-      targetSyncId: { stringValue: syncId },
-      createdAt: { integerValue: Date.now().toString() }
-    }
-  };
-  
-  // PATCH to register pairing code
-  fetch(`https://firestore.googleapis.com/v1/projects/attendmark-sync/databases/(default)/documents/attendmark_pairings/${code}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(firestoreBody)
-  }).then(res => {
-    console.log("Onboarding pairing code registered:", code);
-  }).catch(err => {
-    console.error("Failed to register pairing code:", err);
-  });
-  
-  // Poll for phone payload pushed to sid_xxxxx
-  if (pairingPollInterval) clearInterval(pairingPollInterval);
-  pairingPollInterval = setInterval(async () => {
-    try {
-      const url = `https://firestore.googleapis.com/v1/projects/attendmark-sync/databases/(default)/documents/attendmark_synced_data/${syncId}`;
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const doc = await resp.json();
-        const rawJson = doc.fields?.payloadJson?.stringValue;
-        if (rawJson) {
-          const payload = JSON.parse(rawJson);
-          ingestSyncPayload(payload);
-          lastSyncedTimestamp = parseInt(doc.fields?.lastUpdated?.integerValue || "0", 10) || Date.now();
-          
-          // Set sync config
-          setStoredFirebaseConfig("attendmark-sync", syncId);
-          
-          clearInterval(pairingPollInterval);
-          document.getElementById("onboarding-overlay").classList.add("hidden");
-          showToast("Web Companion Linked Successfully!", "success");
-          switchTab('dashboard');
-        }
-      }
-    } catch (e) {
-      console.debug("Pairing poll error", e);
-    }
-  }, 3000);
-}
+// ---------------- Onboarding UI Helpers ---------------- //
 
 function handleOnboardLocal(e) {
   e.preventDefault();
@@ -1509,7 +1426,6 @@ function handleOnboardLocal(e) {
   db.profile.schoolName = school;
   saveDatabase();
   
-  if (pairingPollInterval) clearInterval(pairingPollInterval);
   document.getElementById("onboarding-overlay").classList.add("hidden");
   showToast("Profile set up successfully!", "success");
   renderClassSelector();
@@ -1530,18 +1446,9 @@ window.addEventListener("DOMContentLoaded", () => {
     // Check if onboarded / has data
     if (!db.profile.fullName && db.classes.length === 0) {
       document.getElementById("onboarding-overlay").classList.remove("hidden");
-      initOnboardingPairing();
     }
   }, 1500);
 
-  const config = getStoredFirebaseConfig();
-  if (config.projectId) {
-    setStoredFirebaseConfig(config.projectId, config.apiKey);
-    autoPollFromFirebase();
-  }
   renderClassSelector();
   switchTab('dashboard');
-
-  // Start Background Poll loop every 8 seconds for true real-time direct sync
-  setInterval(autoPollFromFirebase, 8000);
 });

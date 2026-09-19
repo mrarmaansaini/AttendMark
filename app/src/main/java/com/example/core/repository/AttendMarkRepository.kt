@@ -43,25 +43,11 @@ class AttendMarkRepository(context: Context) {
     private var syncJob: Job? = null
 
     fun triggerAutoSyncPush() {
-        syncJob?.cancel()
-        syncJob = syncScope.launch {
-            delay(1500) // Debounce rapid writes (e.g. marking attendance list)
-            val projectId = preferencesManager.firebaseProjectIdFlow.first()
-            val apiKey = preferencesManager.firebaseApiKeyFlow.first()
-            if (projectId.isNotBlank()) {
-                syncManager.pushToFirebase(projectId, apiKey)
-            }
-        }
+        // No-op: Cloud Sync completely disabled
     }
 
     fun triggerAutoSyncPull() {
-        syncScope.launch {
-            val projectId = preferencesManager.firebaseProjectIdFlow.first()
-            val apiKey = preferencesManager.firebaseApiKeyFlow.first()
-            if (projectId.isNotBlank()) {
-                syncManager.pullFromFirebase(projectId, apiKey)
-            }
-        }
+        // No-op: Cloud Sync completely disabled
     }
 
     // Firebase Sync state flows
