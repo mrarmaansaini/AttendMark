@@ -165,7 +165,9 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Firebase Cloud Sync Card
+            var pairingCode by remember { mutableStateOf("") }
+
+            // Firebase Cloud Sync / Pairing Card
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
                 shape = RoundedCornerShape(16.dp),
@@ -188,13 +190,13 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Firebase Cloud Sync",
+                                text = "Link Web Companion",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                             Text(
-                                text = "Two-way sync with Web using your Firebase project",
+                                text = "Instantly sync with the computer edition without setting up databases",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                             )
@@ -203,64 +205,99 @@ fun ProfileScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    OutlinedTextField(
-                        value = firebaseProjectId,
-                        onValueChange = { firebaseProjectId = it },
-                        label = { Text("Firebase Project ID") },
-                        placeholder = { Text("e.g. attendmark-prod") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp)
-                    )
+                    if (storedProjectId == "attendmark-sync") {
+                        // Linked/Paired state
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                                .padding(12.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(androidx.compose.ui.graphics.Color(0xFF4CAF50))
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Connected & Active",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Direct Sync Active: Auto-upload & Auto-poll are enabled.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (lastSyncTime.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Last synced: $lastSyncTime",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                    OutlinedTextField(
-                        value = firebaseApiKey,
-                        onValueChange = { firebaseApiKey = it },
-                        label = { Text("Firebase Web API Key (Optional)") },
-                        placeholder = { Text("e.g. AIzaSy...") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp)
-                    )
-
-                    if (lastSyncTime.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Last synced: $lastSyncTime",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    repository.saveFirebaseConfig("", "")
+                                    snackbarHostState.showSnackbar("Disconnected from Web Companion")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Disconnect Companion")
+                        }
+                    } else {
+                        // Unpaired state
+                        OutlinedTextField(
+                            value = pairingCode,
+                            onValueChange = { pairingCode = it },
+                            label = { Text("6-Digit Pairing Code") },
+                            placeholder = { Text("e.g. AM-843920") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp)
                         )
-                    }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    Row(modifier = Modifier.fillMaxWidth()) {
                         Button(
                             onClick = {
-                                if (firebaseProjectId.isBlank()) {
-                                    scope.launch { snackbarHostState.showSnackbar("Enter Firebase Project ID") }
+                                if (pairingCode.isBlank()) {
+                                    scope.launch { snackbarHostState.showSnackbar("Enter the 6-digit pairing code from your Web App") }
                                     return@Button
                                 }
                                 if (isSyncing) return@Button
                                 isSyncing = true
                                 scope.launch {
-                                    repository.saveFirebaseConfig(firebaseProjectId, firebaseApiKey)
-                                    val result = repository.syncPushFirebase(firebaseProjectId, firebaseApiKey)
+                                    val result = repository.resolvePairingCode(pairingCode)
                                     isSyncing = false
                                     when (result) {
                                         is com.example.core.sync.SyncResult.Success -> {
-                                            snackbarHostState.showSnackbar("Uploaded to Firebase Firestore!")
+                                            snackbarHostState.showSnackbar("Linked and synced successfully!")
                                         }
                                         is com.example.core.sync.SyncResult.Error -> {
-                                            snackbarHostState.showSnackbar("Firebase error: ${result.message}")
+                                            snackbarHostState.showSnackbar(result.message)
                                         }
                                     }
                                 }
                             },
                             enabled = !isSyncing,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             if (isSyncing) {
@@ -270,45 +307,12 @@ fun ProfileScreen(
                                     color = MaterialTheme.colorScheme.onPrimary
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Syncing...")
+                                Text("Linking Companion...")
                             } else {
-                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Upload")
+                                Text("Link Companion")
                             }
-                        }
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                if (firebaseProjectId.isBlank()) {
-                                    scope.launch { snackbarHostState.showSnackbar("Enter Firebase Project ID") }
-                                    return@OutlinedButton
-                                }
-                                if (isSyncing) return@OutlinedButton
-                                isSyncing = true
-                                scope.launch {
-                                    repository.saveFirebaseConfig(firebaseProjectId, firebaseApiKey)
-                                    val result = repository.syncPullFirebase(firebaseProjectId, firebaseApiKey)
-                                    isSyncing = false
-                                    when (result) {
-                                        is com.example.core.sync.SyncResult.Success -> {
-                                            snackbarHostState.showSnackbar("Received: ${result.message}")
-                                        }
-                                        is com.example.core.sync.SyncResult.Error -> {
-                                            snackbarHostState.showSnackbar(result.message)
-                                        }
-                                    }
-                                }
-                            },
-                            enabled = !isSyncing,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Download")
                         }
                     }
                 }

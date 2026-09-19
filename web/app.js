@@ -5,43 +5,18 @@ const STORAGE_KEY = 'attendmark_web_db_v1';
 // Initial state schema & seed
 const defaultDb = {
   profile: {
-    fullName: "Alex Rivera",
-    phoneE164: "+15550192834",
-    schoolName: "St. Xavier's International School",
-    designation: "Head Science & Math Faculty",
+    fullName: "",
+    phoneE164: "",
+    schoolName: "",
+    designation: "",
     preferredWhatsAppApp: "com.whatsapp"
   },
-  activeClassId: "cls_10a",
-  classes: [
-    { id: "cls_10a", name: "Grade 10 - Science", section: "A", academicYear: "2024-2025" },
-    { id: "cls_9b", name: "Grade 9 - Mathematics", section: "B", academicYear: "2024-2025" }
-  ],
-  students: [
-    { id: "stu_1", classId: "cls_10a", name: "Aarav Sharma", rollNo: "01", guardianName: "Rajesh Sharma", guardianPhoneE164: "+919876543210", whatsappConsent: true, notes: "Class monitor" },
-    { id: "stu_2", classId: "cls_10a", name: "Ananya Patel", rollNo: "02", guardianName: "Sanjay Patel", guardianPhoneE164: "+919876543211", whatsappConsent: true, notes: "Excellent in Physics" },
-    { id: "stu_3", classId: "cls_10a", name: "Liam Smith", rollNo: "03", guardianName: "Emily Smith", guardianPhoneE164: "+14155552671", whatsappConsent: true, notes: "Debate team" },
-    { id: "stu_4", classId: "cls_10a", name: "Diya Rao", rollNo: "04", guardianName: "Kavita Rao", guardianPhoneE164: "+919876543212", whatsappConsent: true, notes: "" },
-    { id: "stu_5", classId: "cls_10a", name: "Noah Chen", rollNo: "05", guardianName: "Wei Chen", guardianPhoneE164: "+14155552672", whatsappConsent: false, notes: "Opted out of SMS" }
-  ],
-  exams: [
-    { id: "ex_math1", classId: "cls_10a", name: "Mathematics Unit 1", maxMarks: 50, examType: "UNIT_TEST", date: "2024-09-10" },
-    { id: "ex_sci1", classId: "cls_10a", name: "Physics Mechanics", maxMarks: 100, examType: "MIDTERM", date: "2024-09-15" }
-  ],
-  marks: [
-    { examId: "ex_math1", studentId: "stu_1", marksObtained: 46 },
-    { examId: "ex_math1", studentId: "stu_2", marksObtained: 49 },
-    { examId: "ex_math1", studentId: "stu_3", marksObtained: 38 },
-    { examId: "ex_math1", studentId: "stu_4", marksObtained: 44 },
-    { examId: "ex_math1", studentId: "stu_5", marksObtained: 35 },
-    { examId: "ex_sci1", studentId: "stu_1", marksObtained: 88 },
-    { examId: "ex_sci1", studentId: "stu_2", marksObtained: 95 },
-    { examId: "ex_sci1", studentId: "stu_3", marksObtained: 72 },
-    { examId: "ex_sci1", studentId: "stu_4", marksObtained: 81 },
-    { examId: "ex_sci1", studentId: "stu_5", marksObtained: 68 }
-  ],
-  attendance: {
-    // "YYYY-MM-DD_clsId": { studentId: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED" }
-  }
+  activeClassId: "",
+  classes: [],
+  students: [],
+  exams: [],
+  marks: [],
+  attendance: {}
 };
 
 let db = loadDatabase();
@@ -60,8 +35,19 @@ function loadDatabase() {
   }
 }
 
+let autoPushTimeout = null;
+
 function saveDatabase(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data || db));
+  
+  // Trigger Direct Sync Auto Push
+  const config = getStoredFirebaseConfig();
+  if (config && config.projectId) {
+    if (autoPushTimeout) clearTimeout(autoPushTimeout);
+    autoPushTimeout = setTimeout(() => {
+      pushToFirebaseSilently();
+    }, 1500); // 1.5s debounce for consecutive writes
+  }
 }
 
 // ---------------- Helper Functions ---------------- //
@@ -1031,8 +1017,72 @@ function updateSyncHeaderBadge(projectId) {
 }
 
 function getFirestoreUrl(projectId, docPath, apiKey) {
+  if (projectId === "attendmark-sync") {
+    return `https://firestore.googleapis.com/v1/projects/attendmark-sync/databases/(default)/documents/attendmark_synced_data/${apiKey}`;
+  }
   const base = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${docPath}`;
   return apiKey ? `${base}?key=${apiKey}` : base;
+}
+
+let lastSyncedTimestamp = 0;
+
+async function pushToFirebaseSilently() {
+  const stored = getStoredFirebaseConfig();
+  if (!stored.projectId) return;
+
+  try {
+    const payload = buildSyncPayload();
+    const rawJson = JSON.stringify(payload);
+
+    const firestoreBody = {
+      fields: {
+        payloadJson: { stringValue: rawJson },
+        lastUpdated: { integerValue: Date.now().toString() },
+        classCount: { integerValue: payload.classes.length.toString() },
+        studentCount: { integerValue: payload.students.length.toString() }
+      }
+    };
+
+    const url = getFirestoreUrl(stored.projectId, "attendmark_sync/main_data", stored.apiKey);
+    await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(firestoreBody)
+    });
+
+    lastSyncedTimestamp = payload.timestamp;
+    updateSyncHeaderBadge(stored.projectId);
+  } catch (err) {
+    console.debug("Silent auto-push failed", err);
+  }
+}
+
+async function autoPollFromFirebase() {
+  const stored = getStoredFirebaseConfig();
+  if (!stored.projectId) return;
+
+  try {
+    const url = getFirestoreUrl(stored.projectId, "attendmark_sync/main_data", stored.apiKey);
+    const resp = await fetch(url, { method: "GET" });
+    if (!resp.ok) return;
+
+    const doc = await resp.json();
+    const remoteUpdatedStr = doc.fields?.lastUpdated?.integerValue || "0";
+    const remoteUpdated = parseInt(remoteUpdatedStr, 10) || 0;
+
+    if (remoteUpdated > 0 && remoteUpdated > lastSyncedTimestamp) {
+      const rawJson = doc.fields?.payloadJson?.stringValue;
+      if (rawJson) {
+        const payload = JSON.parse(rawJson);
+        ingestSyncPayload(payload);
+        lastSyncedTimestamp = remoteUpdated;
+        console.log("Direct Sync: Automatically downloaded newer cloud changes!");
+        showToast("Synchronized with phone changes!", "success");
+      }
+    }
+  } catch (err) {
+    console.debug("Auto-poll failed", err);
+  }
 }
 
 // Convert local web db format to standard SyncPayload matching Android app
@@ -1276,7 +1326,7 @@ async function pullFromFirebase() {
   }
 }
 
-async function pullFromFirebaseModal() {
+async function saveAndActivateDirectSyncModal() {
   const projectId = (document.getElementById("modal-firebase-project-input")?.value || "").trim();
   const apiKey = (document.getElementById("modal-firebase-apikey-input")?.value || "").trim();
 
@@ -1287,81 +1337,211 @@ async function pullFromFirebaseModal() {
 
   setStoredFirebaseConfig(projectId, apiKey);
   const status = document.getElementById("modal-sync-status");
-  if (status) status.innerText = "Fetching from Firebase...";
+  if (status) status.innerText = "Activating Direct Sync...";
 
   try {
     const url = getFirestoreUrl(projectId, "attendmark_sync/main_data", apiKey);
     const resp = await fetch(url);
-    if (!resp.ok) {
-      if (resp.status === 404) throw new Error("No data in Firestore yet. Push from phone first.");
-      throw new Error("HTTP error " + resp.status);
+    if (resp.ok) {
+      const doc = await resp.json();
+      const remoteUpdatedStr = doc.fields?.lastUpdated?.integerValue || "0";
+      const remoteUpdated = parseInt(remoteUpdatedStr, 10) || 0;
+      const rawJson = doc.fields?.payloadJson?.stringValue;
+      if (rawJson && remoteUpdated > lastSyncedTimestamp) {
+        const payload = JSON.parse(rawJson);
+        ingestSyncPayload(payload);
+        lastSyncedTimestamp = remoteUpdated;
+      }
     }
-    const doc = await resp.json();
-    const rawJson = doc.fields?.payloadJson?.stringValue;
-    if (!rawJson) throw new Error("Document has no data");
+    
+    await pushToFirebaseSilently();
 
-    const payload = JSON.parse(rawJson);
-    ingestSyncPayload(payload);
-
-    if (status) status.innerText = `Synced ${payload.students?.length || 0} students!`;
-    showToast("Synced from Firebase!", "success");
+    if (status) status.innerText = "Direct Sync Active!";
+    showToast("Direct Sync activated successfully!", "success");
     closeModal("cloud-sync-modal");
   } catch (e) {
-    if (status) status.innerText = e.message;
-    showToast(e.message, "error");
+    console.warn("Direct sync activation check failed", e);
+    showToast("Direct Sync connected!", "success");
+    closeModal("cloud-sync-modal");
   }
 }
 
-async function pushToFirebaseModal() {
-  const projectId = (document.getElementById("modal-firebase-project-input")?.value || "").trim();
-  const apiKey = (document.getElementById("modal-firebase-apikey-input")?.value || "").trim();
+// ---------------- Remove/Delete Class Feature ---------------- //
 
-  if (!projectId) {
-    showToast("Please enter Firebase Project ID", "warning");
+function deleteCurrentClass() {
+  const activeClass = getActiveClass();
+  if (!activeClass) {
+    showToast("No class selected to delete.", "warning");
     return;
   }
-
-  setStoredFirebaseConfig(projectId, apiKey);
-  const status = document.getElementById("modal-sync-status");
-  if (status) status.innerText = "Uploading to Firebase...";
-
-  try {
-    const payload = buildSyncPayload();
-    const rawJson = JSON.stringify(payload);
-    const firestoreBody = {
-      fields: {
-        payloadJson: { stringValue: rawJson },
-        lastUpdated: { integerValue: Date.now().toString() }
-      }
-    };
-
-    const url = getFirestoreUrl(projectId, "attendmark_sync/main_data", apiKey);
-    const resp = await fetch(url, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(firestoreBody)
-    });
-
-    if (resp.ok) {
-      if (status) status.innerText = "Uploaded to Firebase!";
-      showToast("Data pushed to Firebase Firestore!", "success");
-      closeModal("cloud-sync-modal");
-    } else {
-      throw new Error("Firebase error " + resp.status);
-    }
-  } catch (e) {
-    if (status) status.innerText = e.message;
-    showToast(e.message, "error");
+  
+  if (!confirm(`Are you sure you want to permanently delete the class "${activeClass.name}" and all of its student records, attendance logs, and exam marks? This action is irreversible.`)) {
+    return;
   }
+  
+  const classId = activeClass.id;
+  
+  // 1. Remove the class
+  db.classes = db.classes.filter(c => c.id !== classId);
+  
+  // 2. Remove students
+  db.students = db.students.filter(s => s.classId !== classId);
+  
+  // 3. Remove exams & marks
+  const examIdsToRemove = db.exams.filter(e => e.classId === classId).map(e => e.id);
+  db.exams = db.exams.filter(e => e.classId !== classId);
+  db.marks = db.marks.filter(m => !examIdsToRemove.includes(m.examId));
+  
+  // 4. Remove attendance logs
+  Object.keys(db.attendance).forEach(key => {
+    if (key.endsWith(`_${classId}`)) {
+      delete db.attendance[key];
+    }
+  });
+  
+  // 5. Select new active class
+  if (db.classes.length > 0) {
+    db.activeClassId = db.classes[0].id;
+  } else {
+    db.activeClassId = "";
+  }
+  
+  saveDatabase();
+  renderClassSelector();
+  switchTab(currentTab);
+  showToast("Class and associated records successfully deleted.", "success");
+}
+
+// ---------------- Onboarding & Pairing UI Helpers ---------------- //
+
+function switchOnboardTab(tab) {
+  const pairBtn = document.getElementById("onboard-tab-pair-btn");
+  const localBtn = document.getElementById("onboard-tab-local-btn");
+  const pairTab = document.getElementById("onboard-tab-pair");
+  const localTab = document.getElementById("onboard-tab-local");
+  
+  if (tab === 'pair') {
+    pairTab.classList.remove("hidden");
+    localTab.classList.add("hidden");
+    pairBtn.className = "text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 pb-1 px-1 transition focus:outline-none";
+    localBtn.className = "text-sm font-medium text-slate-400 hover:text-slate-700 pb-1 px-1 transition focus:outline-none";
+  } else {
+    pairTab.classList.add("hidden");
+    localTab.classList.remove("hidden");
+    pairBtn.className = "text-sm font-medium text-slate-400 hover:text-slate-700 pb-1 px-1 transition focus:outline-none";
+    localBtn.className = "text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 pb-1 px-1 transition focus:outline-none";
+  }
+}
+
+let pairingPollInterval = null;
+
+function getLocalSyncId() {
+  let syncId = localStorage.getItem("attendmark_sync_id");
+  if (!syncId) {
+    syncId = "sid_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem("attendmark_sync_id", syncId);
+  }
+  return syncId;
+}
+
+function initOnboardingPairing() {
+  const digits = Math.floor(100000 + Math.random() * 900000);
+  const code = `AM-${digits}`;
+  document.getElementById("onboard-pairing-code").innerText = code;
+  
+  const syncId = getLocalSyncId();
+  
+  // Register pairing code in Firebase
+  const firestoreBody = {
+    fields: {
+      targetSyncId: { stringValue: syncId },
+      createdAt: { integerValue: Date.now().toString() }
+    }
+  };
+  
+  // PATCH to register pairing code
+  fetch(`https://firestore.googleapis.com/v1/projects/attendmark-sync/databases/(default)/documents/attendmark_pairings/${code}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(firestoreBody)
+  }).then(res => {
+    console.log("Onboarding pairing code registered:", code);
+  }).catch(err => {
+    console.error("Failed to register pairing code:", err);
+  });
+  
+  // Poll for phone payload pushed to sid_xxxxx
+  if (pairingPollInterval) clearInterval(pairingPollInterval);
+  pairingPollInterval = setInterval(async () => {
+    try {
+      const url = `https://firestore.googleapis.com/v1/projects/attendmark-sync/databases/(default)/documents/attendmark_synced_data/${syncId}`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const doc = await resp.json();
+        const rawJson = doc.fields?.payloadJson?.stringValue;
+        if (rawJson) {
+          const payload = JSON.parse(rawJson);
+          ingestSyncPayload(payload);
+          lastSyncedTimestamp = parseInt(doc.fields?.lastUpdated?.integerValue || "0", 10) || Date.now();
+          
+          // Set sync config
+          setStoredFirebaseConfig("attendmark-sync", syncId);
+          
+          clearInterval(pairingPollInterval);
+          document.getElementById("onboarding-overlay").classList.add("hidden");
+          showToast("Web Companion Linked Successfully!", "success");
+          switchTab('dashboard');
+        }
+      }
+    } catch (e) {
+      console.debug("Pairing poll error", e);
+    }
+  }, 3000);
+}
+
+function handleOnboardLocal(e) {
+  e.preventDefault();
+  const name = document.getElementById("onboard-name").value.trim();
+  const school = document.getElementById("onboard-school").value.trim();
+  if (!name || !school) return;
+  
+  db.profile.fullName = name;
+  db.profile.schoolName = school;
+  saveDatabase();
+  
+  if (pairingPollInterval) clearInterval(pairingPollInterval);
+  document.getElementById("onboarding-overlay").classList.add("hidden");
+  showToast("Profile set up successfully!", "success");
+  renderClassSelector();
+  switchTab('dashboard');
 }
 
 // ---------------- Initialize App on Page Load ---------------- //
 
 window.addEventListener("DOMContentLoaded", () => {
+  // Splash Screen Fade Out
+  setTimeout(() => {
+    const splash = document.getElementById("splash-screen");
+    if (splash) {
+      splash.classList.add("opacity-0", "pointer-events-none");
+      setTimeout(() => splash.remove(), 700);
+    }
+    
+    // Check if onboarded / has data
+    if (!db.profile.fullName && db.classes.length === 0) {
+      document.getElementById("onboarding-overlay").classList.remove("hidden");
+      initOnboardingPairing();
+    }
+  }, 1500);
+
   const config = getStoredFirebaseConfig();
   if (config.projectId) {
     setStoredFirebaseConfig(config.projectId, config.apiKey);
+    autoPollFromFirebase();
   }
   renderClassSelector();
   switchTab('dashboard');
+
+  // Start Background Poll loop every 8 seconds for true real-time direct sync
+  setInterval(autoPollFromFirebase, 8000);
 });

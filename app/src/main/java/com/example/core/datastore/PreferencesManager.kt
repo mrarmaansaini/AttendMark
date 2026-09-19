@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -44,6 +45,7 @@ class PreferencesManager(private val context: Context) {
         val KEY_FIREBASE_PROJECT_ID = stringPreferencesKey("firebase_project_id")
         val KEY_FIREBASE_API_KEY = stringPreferencesKey("firebase_api_key")
         val KEY_LAST_SYNC_TIME = stringPreferencesKey("last_sync_time")
+        val KEY_LAST_SYNC_TIMESTAMP = longPreferencesKey("last_sync_timestamp")
     }
 
     val firebaseProjectIdFlow: Flow<String> = context.dataStore.data.map { prefs ->
@@ -58,6 +60,10 @@ class PreferencesManager(private val context: Context) {
         prefs[KEY_LAST_SYNC_TIME] ?: ""
     }
 
+    val lastSyncTimestampFlow: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LAST_SYNC_TIMESTAMP] ?: 0L
+    }
+
     suspend fun saveFirebaseConfig(projectId: String, apiKey: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_FIREBASE_PROJECT_ID] = projectId.trim()
@@ -68,6 +74,12 @@ class PreferencesManager(private val context: Context) {
     suspend fun saveLastSyncTime(timeStr: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_LAST_SYNC_TIME] = timeStr
+        }
+    }
+
+    suspend fun saveLastSyncTimestamp(timestamp: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_LAST_SYNC_TIMESTAMP] = timestamp
         }
     }
 

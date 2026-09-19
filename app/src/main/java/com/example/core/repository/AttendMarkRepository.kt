@@ -13,6 +13,11 @@ import com.example.core.database.entity.StudentEntity
 import com.example.core.datastore.PreferencesManager
 import com.example.core.datastore.TeacherProfile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -34,6 +39,31 @@ class AttendMarkRepository(context: Context) {
     val preferencesManager = PreferencesManager(context)
     val syncManager = com.example.core.sync.SyncManager(context, preferencesManager)
 
+    private val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var syncJob: Job? = null
+
+    fun triggerAutoSyncPush() {
+        syncJob?.cancel()
+        syncJob = syncScope.launch {
+            delay(1500) // Debounce rapid writes (e.g. marking attendance list)
+            val projectId = preferencesManager.firebaseProjectIdFlow.first()
+            val apiKey = preferencesManager.firebaseApiKeyFlow.first()
+            if (projectId.isNotBlank()) {
+                syncManager.pushToFirebase(projectId, apiKey)
+            }
+        }
+    }
+
+    fun triggerAutoSyncPull() {
+        syncScope.launch {
+            val projectId = preferencesManager.firebaseProjectIdFlow.first()
+            val apiKey = preferencesManager.firebaseApiKeyFlow.first()
+            if (projectId.isNotBlank()) {
+                syncManager.pullFromFirebase(projectId, apiKey)
+            }
+        }
+    }
+
     // Firebase Sync state flows
     val firebaseProjectIdFlow: Flow<String> = preferencesManager.firebaseProjectIdFlow
     val firebaseApiKeyFlow: Flow<String> = preferencesManager.firebaseApiKeyFlow
@@ -45,6 +75,8 @@ class AttendMarkRepository(context: Context) {
         syncManager.pushToFirebase(projectId, apiKey)
     suspend fun syncPullFirebase(projectId: String, apiKey: String) =
         syncManager.pullFromFirebase(projectId, apiKey)
+    suspend fun resolvePairingCode(code: String) =
+        syncManager.resolvePairingCode(code)
 
     // Profile & Preferences
     val profileFlow: Flow<TeacherProfile> = preferencesManager.profileFlow
@@ -66,11 +98,18 @@ class AttendMarkRepository(context: Context) {
             academicYear = academicYear
         )
         classDao.insertClass(entity)
+        triggerAutoSyncPush()
         return id
     }
 
-    suspend fun updateClass(classRoom: ClassRoomEntity) = classDao.updateClass(classRoom)
-    suspend fun deleteClass(classRoom: ClassRoomEntity) = classDao.deleteClass(classRoom)
+    suspend fun updateClass(classRoom: ClassRoomEntity) {
+        classDao.updateClass(classRoom)
+        triggerAutoSyncPush()
+    }
+    suspend fun deleteClass(classRoom: ClassRoomEntity) {
+        classDao.deleteClass(classRoom)
+        triggerAutoSyncPush()
+    }
     suspend fun deleteClassById(classId: String) {
         classDao.deleteClassById(classId)
         val currentActive = activeClassIdFlow.first()
@@ -83,6 +122,7 @@ class AttendMarkRepository(context: Context) {
                 setActiveClassId("")
             }
         }
+        triggerAutoSyncPush()
     }
 
     // Students
@@ -110,11 +150,21 @@ class AttendMarkRepository(context: Context) {
             notes = notes
         )
         studentDao.insertStudent(entity)
+        triggerAutoSyncPush()
     }
 
-    suspend fun addStudentsBatch(students: List<StudentEntity>) = studentDao.insertStudents(students)
-    suspend fun updateStudent(student: StudentEntity) = studentDao.updateStudent(student)
-    suspend fun deleteStudent(student: StudentEntity) = studentDao.deleteStudent(student)
+    suspend fun addStudentsBatch(students: List<StudentEntity>) {
+        studentDao.insertStudents(students)
+        triggerAutoSyncPush()
+    }
+    suspend fun updateStudent(student: StudentEntity) {
+        studentDao.updateStudent(student)
+        triggerAutoSyncPush()
+    }
+    suspend fun deleteStudent(student: StudentEntity) {
+        studentDao.deleteStudent(student)
+        triggerAutoSyncPush()
+    }
 
     // Attendance
     fun getAttendanceForDate(classId: String, dateIso: String): Flow<List<AttendanceRecordEntity>> =
@@ -134,6 +184,7 @@ class AttendMarkRepository(context: Context) {
             updatedAt = System.currentTimeMillis()
         )
         attendanceDao.insertOrUpdateAttendance(record)
+        triggerAutoSyncPush()
     }
 
     suspend fun markAllStudents(classId: String, studentIds: List<String>, dateIso: String, status: String) {
@@ -148,6 +199,7 @@ class AttendMarkRepository(context: Context) {
             )
         }
         attendanceDao.insertOrUpdateAttendanceBatch(records)
+        triggerAutoSyncPush()
     }
 
     // Exams & Marks
@@ -164,10 +216,14 @@ class AttendMarkRepository(context: Context) {
             dateIso = dateIso
         )
         examDao.insertExam(exam)
+        triggerAutoSyncPush()
         return id
     }
 
-    suspend fun deleteExam(exam: ExamEntity) = examDao.deleteExam(exam)
+    suspend fun deleteExam(exam: ExamEntity) {
+        examDao.deleteExam(exam)
+        triggerAutoSyncPush()
+    }
 
     fun getMarksForExam(examId: String): Flow<List<MarkEntryEntity>> = markDao.getMarksForExam(examId)
     fun getAllMarksForClass(classId: String): Flow<List<MarkEntryEntity>> = markDao.getAllMarksForClass(classId)
@@ -192,6 +248,7 @@ class AttendMarkRepository(context: Context) {
             remarks = remarks
         )
         markDao.insertOrUpdateMark(entry)
+        triggerAutoSyncPush()
     }
 
     // WhatsApp Send Queue

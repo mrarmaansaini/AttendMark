@@ -12,6 +12,7 @@ import com.example.core.datastore.PreferencesManager
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -33,6 +34,11 @@ class SyncManager(
     private val preferencesManager: PreferencesManager
 ) {
     private val db = AttendMarkDatabase.getDatabase(context)
+    
+    @Volatile
+    private var isSyncingInternal = false
+
+    fun isSyncing() = isSyncingInternal
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
@@ -214,6 +220,10 @@ class SyncManager(
         if (cleanProject.isBlank()) {
             return@withContext SyncResult.Error("Please enter your Firebase Project ID first")
         }
+        if (isSyncingInternal) {
+            return@withContext SyncResult.Error("Sync already in progress")
+        }
+        isSyncingInternal = true
 
         try {
             val payload = exportPayload()
@@ -231,7 +241,12 @@ class SyncManager(
             }
 
             val body = firestoreBody.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
-            val url = getFirestoreUrl(cleanProject, "attendmark_sync/main_data", apiKey.trim())
+            val docPath = if (cleanProject == "attendmark-sync") {
+                "attendmark_synced_data/${apiKey.trim()}"
+            } else {
+                "attendmark_sync/main_data"
+            }
+            val url = getFirestoreUrl(cleanProject, docPath, if (cleanProject == "attendmark-sync") null else apiKey.trim())
             
             // PATCH to update or create document
             val request = Request.Builder()
@@ -243,6 +258,7 @@ class SyncManager(
                 if (response.isSuccessful) {
                     val timeStr = SimpleDateFormat("MMM d, hh:mm a", Locale.getDefault()).format(Date())
                     preferencesManager.saveLastSyncTime(timeStr)
+                    preferencesManager.saveLastSyncTimestamp(payload.timestamp)
                     SyncResult.Success("Synced with Firebase Firestore!", payload.classes.size, payload.students.size)
                 } else {
                     val errBody = response.body?.string() ?: ""
@@ -253,6 +269,8 @@ class SyncManager(
         } catch (e: Exception) {
             Log.e("SyncManager", "Push error", e)
             SyncResult.Error("Connection error: ${e.localizedMessage ?: "Unknown error"}")
+        } finally {
+            isSyncingInternal = false
         }
     }
 
@@ -261,9 +279,18 @@ class SyncManager(
         if (cleanProject.isBlank()) {
             return@withContext SyncResult.Error("Please enter your Firebase Project ID first")
         }
+        if (isSyncingInternal) {
+            return@withContext SyncResult.Error("Sync already in progress")
+        }
+        isSyncingInternal = true
 
         try {
-            val url = getFirestoreUrl(cleanProject, "attendmark_sync/main_data", apiKey.trim())
+            val docPath = if (cleanProject == "attendmark-sync") {
+                "attendmark_synced_data/${apiKey.trim()}"
+            } else {
+                "attendmark_sync/main_data"
+            }
+            val url = getFirestoreUrl(cleanProject, docPath, if (cleanProject == "attendmark-sync") null else apiKey.trim())
             val request = Request.Builder()
                 .url(url)
                 .get()
@@ -283,6 +310,15 @@ class SyncManager(
                 val bodyStr = response.body?.string() ?: ""
                 val jsonDoc = JSONObject(bodyStr)
                 val fields = jsonDoc.optJSONObject("fields")
+                
+                // Compare timestamps
+                val remoteUpdatedStr = fields?.optJSONObject("lastUpdated")?.optString("integerValue") ?: "0"
+                val remoteUpdated = remoteUpdatedStr.toLongOrNull() ?: 0L
+                val localUpdated = preferencesManager.lastSyncTimestampFlow.first()
+                if (remoteUpdated > 0L && remoteUpdated <= localUpdated) {
+                    return@withContext SyncResult.Success("Data is up to date", 0, 0)
+                }
+
                 val payloadJson = fields?.optJSONObject("payloadJson")?.optString("stringValue")
 
                 if (payloadJson.isNullOrBlank()) {
@@ -295,10 +331,54 @@ class SyncManager(
                 importPayload(payload)
                 val timeStr = SimpleDateFormat("MMM d, hh:mm a", Locale.getDefault()).format(Date())
                 preferencesManager.saveLastSyncTime(timeStr)
+                preferencesManager.saveLastSyncTimestamp(payload.timestamp)
                 SyncResult.Success("Synced ${payload.classes.size} classes, ${payload.students.size} students from Firebase", payload.classes.size, payload.students.size)
             }
         } catch (e: Exception) {
             Log.e("SyncManager", "Pull error", e)
+            SyncResult.Error("Connection error: ${e.localizedMessage ?: "Unknown error"}")
+        } finally {
+            isSyncingInternal = false
+        }
+    }
+
+    suspend fun resolvePairingCode(code: String): SyncResult = withContext(Dispatchers.IO) {
+        val cleanCode = code.trim().uppercase(Locale.getDefault())
+        if (cleanCode.isBlank()) {
+            return@withContext SyncResult.Error("Pairing code cannot be empty")
+        }
+        try {
+            val url = "https://firestore.googleapis.com/v1/projects/attendmark-sync/databases/(default)/documents/attendmark_pairings/$cleanCode"
+            val request = Request.Builder()
+                .url(url)
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bodyStr = response.body?.string() ?: ""
+                    val json = JSONObject(bodyStr)
+                    val fields = json.optJSONObject("fields")
+                    val targetSyncId = fields?.optJSONObject("targetSyncId")?.optString("stringValue") ?: ""
+                    if (targetSyncId.isNotBlank()) {
+                        // Save config: project id = "attendmark-sync", api key = targetSyncId
+                        preferencesManager.saveFirebaseConfig("attendmark-sync", targetSyncId)
+                        // Trigger initial push to upload current database to companion web app
+                        pushToFirebase("attendmark-sync", targetSyncId)
+                        SyncResult.Success("Paired successfully with web companion!", 0, 0)
+                    } else {
+                        SyncResult.Error("Pairing code corrupted. Please try again.")
+                    }
+                } else {
+                    if (response.code == 404) {
+                        SyncResult.Error("Invalid or expired pairing code. Please check and try again.")
+                    } else {
+                        SyncResult.Error("Failed to pair (${response.code}). Please try again later.")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SyncManager", "Pairing error", e)
             SyncResult.Error("Connection error: ${e.localizedMessage ?: "Unknown error"}")
         }
     }
