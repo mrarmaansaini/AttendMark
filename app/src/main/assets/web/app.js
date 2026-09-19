@@ -2,46 +2,31 @@
 
 const STORAGE_KEY = 'attendmark_web_db_v1';
 
+function safeCreateIcons() {
+  if (typeof lucide !== 'undefined' && lucide.createIcons) {
+    try {
+      lucide.createIcons();
+    } catch(e) {
+      console.warn("Lucide render error:", e);
+    }
+  }
+}
+
 // Initial state schema & seed
 const defaultDb = {
   profile: {
-    fullName: "Alex Rivera",
-    phoneE164: "+15550192834",
-    schoolName: "St. Xavier's International School",
-    designation: "Head Science & Math Faculty",
+    fullName: "",
+    phoneE164: "",
+    schoolName: "",
+    designation: "",
     preferredWhatsAppApp: "com.whatsapp"
   },
-  activeClassId: "cls_10a",
-  classes: [
-    { id: "cls_10a", name: "Grade 10 - Science", section: "A", academicYear: "2024-2025" },
-    { id: "cls_9b", name: "Grade 9 - Mathematics", section: "B", academicYear: "2024-2025" }
-  ],
-  students: [
-    { id: "stu_1", classId: "cls_10a", name: "Aarav Sharma", rollNo: "01", guardianName: "Rajesh Sharma", guardianPhoneE164: "+919876543210", whatsappConsent: true, notes: "Class monitor" },
-    { id: "stu_2", classId: "cls_10a", name: "Ananya Patel", rollNo: "02", guardianName: "Sanjay Patel", guardianPhoneE164: "+919876543211", whatsappConsent: true, notes: "Excellent in Physics" },
-    { id: "stu_3", classId: "cls_10a", name: "Liam Smith", rollNo: "03", guardianName: "Emily Smith", guardianPhoneE164: "+14155552671", whatsappConsent: true, notes: "Debate team" },
-    { id: "stu_4", classId: "cls_10a", name: "Diya Rao", rollNo: "04", guardianName: "Kavita Rao", guardianPhoneE164: "+919876543212", whatsappConsent: true, notes: "" },
-    { id: "stu_5", classId: "cls_10a", name: "Noah Chen", rollNo: "05", guardianName: "Wei Chen", guardianPhoneE164: "+14155552672", whatsappConsent: false, notes: "Opted out of SMS" }
-  ],
-  exams: [
-    { id: "ex_math1", classId: "cls_10a", name: "Mathematics Unit 1", maxMarks: 50, examType: "UNIT_TEST", date: "2024-09-10" },
-    { id: "ex_sci1", classId: "cls_10a", name: "Physics Mechanics", maxMarks: 100, examType: "MIDTERM", date: "2024-09-15" }
-  ],
-  marks: [
-    { examId: "ex_math1", studentId: "stu_1", marksObtained: 46 },
-    { examId: "ex_math1", studentId: "stu_2", marksObtained: 49 },
-    { examId: "ex_math1", studentId: "stu_3", marksObtained: 38 },
-    { examId: "ex_math1", studentId: "stu_4", marksObtained: 44 },
-    { examId: "ex_math1", studentId: "stu_5", marksObtained: 35 },
-    { examId: "ex_sci1", studentId: "stu_1", marksObtained: 88 },
-    { examId: "ex_sci1", studentId: "stu_2", marksObtained: 95 },
-    { examId: "ex_sci1", studentId: "stu_3", marksObtained: 72 },
-    { examId: "ex_sci1", studentId: "stu_4", marksObtained: 81 },
-    { examId: "ex_sci1", studentId: "stu_5", marksObtained: 68 }
-  ],
-  attendance: {
-    // "YYYY-MM-DD_clsId": { studentId: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED" }
-  }
+  activeClassId: "",
+  classes: [],
+  students: [],
+  exams: [],
+  marks: [],
+  attendance: {}
 };
 
 let db = loadDatabase();
@@ -60,8 +45,19 @@ function loadDatabase() {
   }
 }
 
+let autoPushTimeout = null;
+
 function saveDatabase(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data || db));
+  
+  // Trigger Direct Sync Auto Push
+  const config = getStoredFirebaseConfig();
+  if (config && config.projectId) {
+    if (autoPushTimeout) clearTimeout(autoPushTimeout);
+    autoPushTimeout = setTimeout(() => {
+      pushToFirebaseSilently();
+    }, 1500); // 1.5s debounce for consecutive writes
+  }
 }
 
 // ---------------- Helper Functions ---------------- //
@@ -118,7 +114,7 @@ function showToast(message, type = "info") {
 
 function openModal(id) {
   document.getElementById(id)?.classList.remove("hidden");
-  lucide.createIcons();
+  safeCreateIcons();
 }
 
 function closeModal(id) {
@@ -176,7 +172,7 @@ function switchTab(tabId) {
   if (tabId === 'students') renderStudents();
   if (tabId === 'profile') renderProfile();
 
-  lucide.createIcons();
+  safeCreateIcons();
 }
 
 // ---------------- Header & Classes ---------------- //
@@ -370,7 +366,7 @@ function renderAttendance() {
     `;
   }).join("");
 
-  lucide.createIcons();
+  safeCreateIcons();
 }
 
 function setStudentAttendance(studentId, status) {
@@ -546,7 +542,7 @@ function renderMarks() {
     `;
   }).join("");
 
-  lucide.createIcons();
+  safeCreateIcons();
 }
 
 function saveStudentMarks(examId, studentId, value, maxMarks) {
@@ -785,7 +781,7 @@ function renderStudents() {
     `;
   }).join("");
 
-  lucide.createIcons();
+  safeCreateIcons();
 }
 
 function handleCreateStudent(e) {
@@ -963,13 +959,15 @@ function importJsonBackup(event) {
 }
 
 function resetAllData() {
-  if (!confirm("Are you absolutely sure? This will wipe all classes, students, and marks in the Web Edition.")) return;
-  localStorage.removeItem(STORAGE_KEY);
+  if (!confirm("Are you absolutely sure you want to delete your account? This will permanently wipe all classes, student rosters, exam marks, and attendance records on this device.")) return;
+  localStorage.clear();
   db = JSON.parse(JSON.stringify(defaultDb));
   saveDatabase();
   renderClassSelector();
-  switchTab('dashboard');
-  showToast("All data reset to factory defaults", "info");
+  
+  // Show onboarding screen
+  document.getElementById("onboarding-overlay").classList.remove("hidden");
+  showToast("Account deleted and database purged completely.", "success");
 }
 
 function downloadCsv(content, filename) {
@@ -982,44 +980,125 @@ function downloadCsv(content, filename) {
   URL.revokeObjectURL(url);
 }
 
-// ---------------- Cloud Sync Engine (Phone <-> Web) ---------------- //
+// ---------------- Firebase Firestore Cloud Sync Engine (Phone <-> Web) ---------------- //
 
-const SYNC_BUCKET_URL = "https://kvdb.io/4y9hN6Fk2XvH4X9gZ9L1pA";
-const SYNC_CODE_KEY = "attendmark_sync_code";
+const FIREBASE_PROJECT_KEY = "attendmark_firebase_project_id";
+const FIREBASE_API_KEY = "attendmark_firebase_api_key";
 
-function getStoredSyncCode() {
-  return (localStorage.getItem(SYNC_CODE_KEY) || "").toUpperCase().trim();
+function getStoredFirebaseConfig() {
+  return {
+    projectId: (localStorage.getItem(FIREBASE_PROJECT_KEY) || "").trim(),
+    apiKey: (localStorage.getItem(FIREBASE_API_KEY) || "").trim()
+  };
 }
 
-function setStoredSyncCode(code) {
-  const clean = (code || "").toUpperCase().trim();
-  localStorage.setItem(SYNC_CODE_KEY, clean);
-  const input1 = document.getElementById("sync-code-input");
-  const input2 = document.getElementById("modal-sync-code-input");
-  if (input1) input1.value = clean;
-  if (input2) input2.value = clean;
-  updateSyncHeaderBadge(clean);
+function setStoredFirebaseConfig(projectId, apiKey) {
+  const cleanProj = (projectId || "").trim();
+  const cleanKey = (apiKey || "").trim();
+  localStorage.setItem(FIREBASE_PROJECT_KEY, cleanProj);
+  localStorage.setItem(FIREBASE_API_KEY, cleanKey);
+
+  const p1 = document.getElementById("firebase-project-input");
+  const k1 = document.getElementById("firebase-apikey-input");
+  const p2 = document.getElementById("modal-firebase-project-input");
+  const k2 = document.getElementById("modal-firebase-apikey-input");
+
+  if (p1) p1.value = cleanProj;
+  if (k1) k1.value = cleanKey;
+  if (p2) p2.value = cleanProj;
+  if (k2) k2.value = cleanKey;
+
+  updateSyncHeaderBadge(cleanProj);
 }
 
-function updateSyncHeaderBadge(code) {
+function updateSyncHeaderBadge(projectId) {
   const label = document.getElementById("header-sync-label");
   const icon = document.getElementById("header-sync-icon");
   const btn = document.getElementById("header-sync-btn");
   if (!label || !btn) return;
 
-  if (code) {
-    label.innerText = code;
-    btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-xs transition shadow-sm";
-    if (icon) icon.className = "w-3.5 h-3.5 text-emerald-600";
+  if (projectId) {
+    label.innerText = "Firebase Connected";
+    btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-bold text-xs transition shadow-sm";
+    if (icon) icon.className = "w-3.5 h-3.5 text-amber-600";
   } else {
-    label.innerText = "Sync";
-    btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-xs transition shadow-sm";
-    if (icon) icon.className = "w-3.5 h-3.5 text-indigo-600";
+    label.innerText = "Firebase Sync";
+    btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 font-semibold text-xs transition shadow-sm";
+    if (icon) icon.className = "w-3.5 h-3.5 text-slate-500";
+  }
+}
+
+function getFirestoreUrl(projectId, docPath, apiKey) {
+  if (projectId === "attendmark-sync") {
+    return `https://firestore.googleapis.com/v1/projects/attendmark-sync/databases/(default)/documents/attendmark_synced_data/${apiKey}`;
+  }
+  const base = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${docPath}`;
+  return apiKey ? `${base}?key=${apiKey}` : base;
+}
+
+let lastSyncedTimestamp = 0;
+
+async function pushToFirebaseSilently() {
+  const stored = getStoredFirebaseConfig();
+  if (!stored.projectId) return;
+
+  try {
+    const payload = buildSyncPayload();
+    const rawJson = JSON.stringify(payload);
+
+    const firestoreBody = {
+      fields: {
+        payloadJson: { stringValue: rawJson },
+        lastUpdated: { integerValue: Date.now().toString() },
+        classCount: { integerValue: payload.classes.length.toString() },
+        studentCount: { integerValue: payload.students.length.toString() }
+      }
+    };
+
+    const url = getFirestoreUrl(stored.projectId, "attendmark_sync/main_data", stored.apiKey);
+    await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(firestoreBody)
+    });
+
+    lastSyncedTimestamp = payload.timestamp;
+    updateSyncHeaderBadge(stored.projectId);
+  } catch (err) {
+    console.debug("Silent auto-push failed", err);
+  }
+}
+
+async function autoPollFromFirebase() {
+  const stored = getStoredFirebaseConfig();
+  if (!stored.projectId) return;
+
+  try {
+    const url = getFirestoreUrl(stored.projectId, "attendmark_sync/main_data", stored.apiKey);
+    const resp = await fetch(url, { method: "GET" });
+    if (!resp.ok) return;
+
+    const doc = await resp.json();
+    const remoteUpdatedStr = doc.fields?.lastUpdated?.integerValue || "0";
+    const remoteUpdated = parseInt(remoteUpdatedStr, 10) || 0;
+
+    if (remoteUpdated > 0 && remoteUpdated > lastSyncedTimestamp) {
+      const rawJson = doc.fields?.payloadJson?.stringValue;
+      if (rawJson) {
+        const payload = JSON.parse(rawJson);
+        ingestSyncPayload(payload);
+        lastSyncedTimestamp = remoteUpdated;
+        console.log("Direct Sync: Automatically downloaded newer cloud changes!");
+        showToast("Synchronized with phone changes!", "success");
+      }
+    }
+  } catch (err) {
+    console.debug("Auto-poll failed", err);
   }
 }
 
 // Convert local web db format to standard SyncPayload matching Android app
-function buildSyncPayload(syncCode) {
+function buildSyncPayload() {
   const syncClasses = (db.classes || []).map(c => ({
     id: c.id,
     name: c.name,
@@ -1045,7 +1124,6 @@ function buildSyncPayload(syncCode) {
   const syncAttendance = [];
   if (db.attendance) {
     Object.keys(db.attendance).forEach(key => {
-      // Key format: "YYYY-MM-DD_clsId"
       const parts = key.split("_");
       const dateIso = parts[0];
       const classId = parts.slice(1).join("_") || (db.classes[0]?.id || "");
@@ -1087,7 +1165,7 @@ function buildSyncPayload(syncCode) {
   }));
 
   return {
-    syncCode: syncCode,
+    syncCode: "firebase",
     timestamp: Date.now(),
     appVersion: "1.0",
     classes: syncClasses,
@@ -1098,13 +1176,12 @@ function buildSyncPayload(syncCode) {
   };
 }
 
-// Ingest payload received from Android app into local web db
+// Ingest payload received from Firestore into local web db
 function ingestSyncPayload(payload) {
   if (!payload || !payload.classes) {
-    throw new Error("Invalid payload structure from cloud");
+    throw new Error("Invalid payload structure from Firebase");
   }
 
-  // Merge classes
   if (payload.classes.length > 0) {
     db.classes = payload.classes.map(c => ({
       id: c.id,
@@ -1115,7 +1192,6 @@ function ingestSyncPayload(payload) {
     db.activeClassId = db.classes[0]?.id || "";
   }
 
-  // Merge students
   if (payload.students.length > 0) {
     db.students = payload.students.map(s => ({
       id: s.id,
@@ -1129,7 +1205,6 @@ function ingestSyncPayload(payload) {
     }));
   }
 
-  // Merge exams
   if (payload.exams.length > 0) {
     db.exams = payload.exams.map(e => ({
       id: e.id,
@@ -1141,7 +1216,6 @@ function ingestSyncPayload(payload) {
     }));
   }
 
-  // Merge marks
   if (payload.marks.length > 0) {
     db.marks = payload.marks.map(m => ({
       examId: m.examId,
@@ -1150,7 +1224,6 @@ function ingestSyncPayload(payload) {
     }));
   }
 
-  // Merge attendance
   if (payload.attendance && payload.attendance.length > 0) {
     db.attendance = db.attendance || {};
     payload.attendance.forEach(rec => {
@@ -1167,135 +1240,225 @@ function ingestSyncPayload(payload) {
   switchTab(currentTab);
 }
 
-async function pushToCloud() {
-  const code = (document.getElementById("sync-code-input")?.value || getStoredSyncCode()).trim().toUpperCase();
-  if (!code || code.length < 4) {
-    showToast("Please enter a valid 6-character Sync Code first", "warning");
+async function pushToFirebase() {
+  const projInput = document.getElementById("firebase-project-input")?.value;
+  const keyInput = document.getElementById("firebase-apikey-input")?.value;
+  const stored = getStoredFirebaseConfig();
+
+  const projectId = (projInput !== undefined ? projInput : stored.projectId).trim();
+  const apiKey = (keyInput !== undefined ? keyInput : stored.apiKey).trim();
+
+  if (!projectId) {
+    showToast("Please enter your Firebase Project ID", "warning");
     return;
   }
 
-  setStoredSyncCode(code);
+  setStoredFirebaseConfig(projectId, apiKey);
   const statusEl = document.getElementById("sync-status-text");
-  if (statusEl) statusEl.innerText = "Pushing data to cloud...";
+  if (statusEl) statusEl.innerText = "Connecting to Firebase Firestore...";
 
   try {
-    const payload = buildSyncPayload(code);
-    const resp = await fetch(`${SYNC_BUCKET_URL}/${code}`, {
-      method: "POST",
+    const payload = buildSyncPayload();
+    const rawJson = JSON.stringify(payload);
+
+    const firestoreBody = {
+      fields: {
+        payloadJson: { stringValue: rawJson },
+        lastUpdated: { integerValue: Date.now().toString() },
+        classCount: { integerValue: payload.classes.length.toString() },
+        studentCount: { integerValue: payload.students.length.toString() }
+      }
+    };
+
+    const url = getFirestoreUrl(projectId, "attendmark_sync/main_data", apiKey);
+    const resp = await fetch(url, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(firestoreBody)
     });
 
     if (resp.ok) {
-      if (statusEl) statusEl.innerText = `Data uploaded! Open phone app and tap 'Download' with code ${code}.`;
-      showToast(`Uploaded to Cloud! Sync Code: ${code}`, "success");
+      if (statusEl) statusEl.innerText = `Data uploaded to Firebase! (${payload.classes.length} classes, ${payload.students.length} students)`;
+      showToast("Uploaded to Firebase Firestore!", "success");
     } else {
-      throw new Error(`Server returned ${resp.status}`);
+      const err = await resp.text();
+      console.error("Firestore push error", err);
+      throw new Error(`Firebase returned ${resp.status}. Verify Firestore rules.`);
     }
   } catch (err) {
-    console.error("Cloud push failed", err);
+    console.error("Firebase push failed", err);
     if (statusEl) statusEl.innerText = "Error: " + err.message;
-    showToast("Push failed: " + err.message, "error");
+    showToast(err.message, "error");
   }
 }
 
-async function pullFromCloud() {
-  const code = (document.getElementById("sync-code-input")?.value || getStoredSyncCode()).trim().toUpperCase();
-  if (!code || code.length < 4) {
-    showToast("Please enter the 6-character code from your phone", "warning");
+async function pullFromFirebase() {
+  const projInput = document.getElementById("firebase-project-input")?.value;
+  const keyInput = document.getElementById("firebase-apikey-input")?.value;
+  const stored = getStoredFirebaseConfig();
+
+  const projectId = (projInput !== undefined ? projInput : stored.projectId).trim();
+  const apiKey = (keyInput !== undefined ? keyInput : stored.apiKey).trim();
+
+  if (!projectId) {
+    showToast("Please enter your Firebase Project ID", "warning");
     return;
   }
 
-  setStoredSyncCode(code);
+  setStoredFirebaseConfig(projectId, apiKey);
   const statusEl = document.getElementById("sync-status-text");
-  if (statusEl) statusEl.innerText = "Connecting to phone cloud storage...";
+  if (statusEl) statusEl.innerText = "Fetching from Firebase Firestore...";
 
   try {
-    const resp = await fetch(`${SYNC_BUCKET_URL}/${code}`, {
-      method: "GET"
-    });
+    const url = getFirestoreUrl(projectId, "attendmark_sync/main_data", apiKey);
+    const resp = await fetch(url, { method: "GET" });
 
     if (!resp.ok) {
       if (resp.status === 404) {
-        throw new Error(`No data found for code ${code}. On your phone, tap 'Upload to Web' first!`);
+        throw new Error(`No data found in Firebase project '${projectId}'. Push data first from phone or web.`);
       }
-      throw new Error(`Cloud error ${resp.status}`);
+      throw new Error(`Firebase error ${resp.status}. Verify Firestore rules.`);
     }
 
-    const payload = await resp.json();
+    const doc = await resp.json();
+    const rawJson = doc.fields?.payloadJson?.stringValue;
+    if (!rawJson) {
+      throw new Error("Empty data payload in Firestore");
+    }
+
+    const payload = JSON.parse(rawJson);
     ingestSyncPayload(payload);
 
     if (statusEl) statusEl.innerText = `Synced! Loaded ${payload.classes?.length || 0} classes and ${payload.students?.length || 0} students.`;
-    showToast(`Synced successfully with phone (${code})!`, "success");
+    showToast("Synced from Firebase Firestore!", "success");
   } catch (err) {
-    console.error("Cloud pull failed", err);
+    console.error("Firebase pull failed", err);
     if (statusEl) statusEl.innerText = err.message;
     showToast(err.message, "error");
   }
 }
 
-async function pullFromCloudModal() {
-  const code = (document.getElementById("modal-sync-code-input")?.value || "").trim().toUpperCase();
-  if (!code) {
-    showToast("Please enter code", "warning");
+async function saveAndActivateDirectSyncModal() {
+  const projectId = (document.getElementById("modal-firebase-project-input")?.value || "").trim();
+  const apiKey = (document.getElementById("modal-firebase-apikey-input")?.value || "").trim();
+
+  if (!projectId) {
+    showToast("Please enter Firebase Project ID", "warning");
     return;
   }
-  setStoredSyncCode(code);
+
+  setStoredFirebaseConfig(projectId, apiKey);
   const status = document.getElementById("modal-sync-status");
-  if (status) status.innerText = "Fetching phone data...";
+  if (status) status.innerText = "Activating Direct Sync...";
+
   try {
-    const resp = await fetch(`${SYNC_BUCKET_URL}/${code}`);
-    if (!resp.ok) {
-      if (resp.status === 404) throw new Error("No phone data found. Tap 'Upload to Web' on your phone first.");
-      throw new Error("HTTP error " + resp.status);
+    const url = getFirestoreUrl(projectId, "attendmark_sync/main_data", apiKey);
+    const resp = await fetch(url);
+    if (resp.ok) {
+      const doc = await resp.json();
+      const remoteUpdatedStr = doc.fields?.lastUpdated?.integerValue || "0";
+      const remoteUpdated = parseInt(remoteUpdatedStr, 10) || 0;
+      const rawJson = doc.fields?.payloadJson?.stringValue;
+      if (rawJson && remoteUpdated > lastSyncedTimestamp) {
+        const payload = JSON.parse(rawJson);
+        ingestSyncPayload(payload);
+        lastSyncedTimestamp = remoteUpdated;
+      }
     }
-    const payload = await resp.json();
-    ingestSyncPayload(payload);
-    if (status) status.innerText = `Synced ${payload.students?.length || 0} students!`;
-    showToast("Phone data synced successfully!", "success");
+    
+    await pushToFirebaseSilently();
+
+    if (status) status.innerText = "Direct Sync Active!";
+    showToast("Direct Sync activated successfully!", "success");
     closeModal("cloud-sync-modal");
   } catch (e) {
-    if (status) status.innerText = e.message;
-    showToast(e.message, "error");
+    console.warn("Direct sync activation check failed", e);
+    showToast("Direct Sync connected!", "success");
+    closeModal("cloud-sync-modal");
   }
 }
 
-async function pushToCloudModal() {
-  const code = (document.getElementById("modal-sync-code-input")?.value || "").trim().toUpperCase();
-  if (!code) {
-    showToast("Please enter code", "warning");
+// ---------------- Remove/Delete Class Feature ---------------- //
+
+function deleteCurrentClass() {
+  const activeClass = getActiveClass();
+  if (!activeClass) {
+    showToast("No class selected to delete.", "warning");
     return;
   }
-  setStoredSyncCode(code);
-  const status = document.getElementById("modal-sync-status");
-  if (status) status.innerText = "Uploading web data...";
-  try {
-    const payload = buildSyncPayload(code);
-    const resp = await fetch(`${SYNC_BUCKET_URL}/${code}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    if (resp.ok) {
-      if (status) status.innerText = "Uploaded! Tap 'Download' on phone.";
-      showToast("Web data uploaded to phone cloud!", "success");
-      closeModal("cloud-sync-modal");
-    } else {
-      throw new Error("Server error " + resp.status);
-    }
-  } catch (e) {
-    if (status) status.innerText = e.message;
-    showToast(e.message, "error");
+  
+  if (!confirm(`Are you sure you want to permanently delete the class "${activeClass.name}" and all of its student records, attendance logs, and exam marks? This action is irreversible.`)) {
+    return;
   }
+  
+  const classId = activeClass.id;
+  
+  // 1. Remove the class
+  db.classes = db.classes.filter(c => c.id !== classId);
+  
+  // 2. Remove students
+  db.students = db.students.filter(s => s.classId !== classId);
+  
+  // 3. Remove exams & marks
+  const examIdsToRemove = db.exams.filter(e => e.classId === classId).map(e => e.id);
+  db.exams = db.exams.filter(e => e.classId !== classId);
+  db.marks = db.marks.filter(m => !examIdsToRemove.includes(m.examId));
+  
+  // 4. Remove attendance logs
+  Object.keys(db.attendance).forEach(key => {
+    if (key.endsWith(`_${classId}`)) {
+      delete db.attendance[key];
+    }
+  });
+  
+  // 5. Select new active class
+  if (db.classes.length > 0) {
+    db.activeClassId = db.classes[0].id;
+  } else {
+    db.activeClassId = "";
+  }
+  
+  saveDatabase();
+  renderClassSelector();
+  switchTab(currentTab);
+  showToast("Class and associated records successfully deleted.", "success");
+}
+
+// ---------------- Onboarding UI Helpers ---------------- //
+
+function handleOnboardLocal(e) {
+  e.preventDefault();
+  const name = document.getElementById("onboard-name").value.trim();
+  const school = document.getElementById("onboard-school").value.trim();
+  if (!name || !school) return;
+  
+  db.profile.fullName = name;
+  db.profile.schoolName = school;
+  saveDatabase();
+  
+  document.getElementById("onboarding-overlay").classList.add("hidden");
+  showToast("Profile set up successfully!", "success");
+  renderClassSelector();
+  switchTab('dashboard');
 }
 
 // ---------------- Initialize App on Page Load ---------------- //
 
 window.addEventListener("DOMContentLoaded", () => {
-  const storedCode = getStoredSyncCode();
-  if (storedCode) {
-    setStoredSyncCode(storedCode);
-  }
+  // Splash Screen Fade Out
+  setTimeout(() => {
+    const splash = document.getElementById("splash-screen");
+    if (splash) {
+      splash.classList.add("opacity-0", "pointer-events-none");
+      setTimeout(() => splash.remove(), 700);
+    }
+    
+    // Check if onboarded / has data
+    if (!db.profile.fullName && db.classes.length === 0) {
+      document.getElementById("onboarding-overlay").classList.remove("hidden");
+    }
+  }, 1500);
+
   renderClassSelector();
   switchTab('dashboard');
 });

@@ -2,6 +2,16 @@
 
 const STORAGE_KEY = 'attendmark_web_db_v1';
 
+function safeCreateIcons() {
+  if (typeof lucide !== 'undefined' && lucide.createIcons) {
+    try {
+      lucide.createIcons();
+    } catch(e) {
+      console.warn("Lucide render error:", e);
+    }
+  }
+}
+
 // Initial state schema & seed
 const defaultDb = {
   profile: {
@@ -104,7 +114,7 @@ function showToast(message, type = "info") {
 
 function openModal(id) {
   document.getElementById(id)?.classList.remove("hidden");
-  lucide.createIcons();
+  safeCreateIcons();
 }
 
 function closeModal(id) {
@@ -162,7 +172,7 @@ function switchTab(tabId) {
   if (tabId === 'students') renderStudents();
   if (tabId === 'profile') renderProfile();
 
-  lucide.createIcons();
+  safeCreateIcons();
 }
 
 // ---------------- Header & Classes ---------------- //
@@ -356,7 +366,7 @@ function renderAttendance() {
     `;
   }).join("");
 
-  lucide.createIcons();
+  safeCreateIcons();
 }
 
 function setStudentAttendance(studentId, status) {
@@ -532,7 +542,7 @@ function renderMarks() {
     `;
   }).join("");
 
-  lucide.createIcons();
+  safeCreateIcons();
 }
 
 function saveStudentMarks(examId, studentId, value, maxMarks) {
@@ -771,7 +781,7 @@ function renderStudents() {
     `;
   }).join("");
 
-  lucide.createIcons();
+  safeCreateIcons();
 }
 
 function handleCreateStudent(e) {
