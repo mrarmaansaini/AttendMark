@@ -1,5 +1,6 @@
 # AttendMark Single Setup Installer NSIS Script
 Unicode true
+SetCompressor /SOLID lzma
 
 # Name and Output file
 Name "AttendMark"
